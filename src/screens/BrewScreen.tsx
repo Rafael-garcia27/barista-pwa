@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Bean, BrewLog, TasteTag } from "../types";
 import { addBrew, listBeans, uuid } from "../db";
 import { makeSuggestion } from "../suggest";
+import { Coffee, Filter, Snowflake, CupSoda, Gauge } from "lucide-react";
 
 type BrewMethod =
   | "Siebträger"
@@ -29,27 +30,27 @@ const DEFAULTS: Record<
   Siebträger: {
     coffeeGrams: 17,
     timeSeconds: 25,
-    hint: "Espresso Startpunkt. 17g in. 25s out. Danach feinjustieren über Mahlgrad.",
+    hint: "Espresso Startpunkt: 17g in, 25s out. Danach: feinjustieren über Mahlgrad.",
   },
   Aeropress: {
     coffeeGrams: 18,
     timeSeconds: 120,
-    hint: "Aeropress Startpunkt. 18g. 2:00. Danach. feiner oder länger für mehr Extraktion.",
+    hint: "Aeropress Startpunkt: 18g, 2:00. Danach: feiner oder länger für mehr Extraktion.",
   },
   "Pour Over": {
     coffeeGrams: 20,
     timeSeconds: 150,
-    hint: "Pour Over Startpunkt. 20g. 2:30. Ziel. gleichmäßiger Flow und stabile Zeit.",
+    hint: "Pour Over Startpunkt: 20g, 2:30. Ziel: gleichmäßiger Flow und stabile Zeit.",
   },
   "French Press": {
     coffeeGrams: 30,
     timeSeconds: 240,
-    hint: "French Press Startpunkt. 30g. 4:00. Eher grob mahlen. sanft pressen.",
+    hint: "French Press Startpunkt: 30g, 4:00. Eher grob mahlen. sanft pressen.",
   },
   "Cold Brew Aeropress": {
     coffeeGrams: 20,
     timeSeconds: 600,
-    hint: "Cold Brew Startpunkt. 20g. 10:00 Ziehzeit. Danach pressen. Eis optional.",
+    hint: "Cold Brew Startpunkt: 20g, 1:00 Rühren, 1:00 Ziehzeit. Danach pressen, Eis optional.",
   },
 };
 
@@ -67,7 +68,21 @@ function formatTime(seconds: number) {
   if (m <= 0) return `${seconds}s`;
   return `${m}:${String(s).padStart(2, "0")} min`;
 }
-
+function MethodIcon(props: { method: BrewMethod; active: boolean }) {
+  const cls = "h-5 w-5";
+  switch (props.method) {
+    case "Siebträger":
+      return <Coffee className={cls} />;
+    case "Aeropress":
+      return <Gauge className={cls} />;
+    case "Pour Over":
+      return <Filter className={cls} />;
+    case "French Press":
+      return <CupSoda className={cls} />;
+    case "Cold Brew Aeropress":
+      return <Snowflake className={cls} />;
+  }
+}
 export default function BrewScreen() {
   const [beans, setBeans] = useState<Bean[]>([]);
   const [beanId, setBeanId] = useState<string>("");
@@ -167,7 +182,30 @@ export default function BrewScreen() {
               {m.label}
             </option>
           ))}
-        </select>
+        </select><div className="mt-3 text-xs text-neutral-600">Brühverfahren</div>
+
+<div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+  {METHODS.map((m) => {
+    const active = method === m.id;
+    return (
+      <button
+        key={m.id}
+        type="button"
+        onClick={() => onChangeMethod(m.id)}
+        className={[
+          "flex shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border px-3 py-2 text-xs",
+          active
+            ? "bg-neutral-900 text-white border-neutral-900"
+            : "bg-white text-neutral-700 border-neutral-200",
+        ].join(" ")}
+        aria-pressed={active}
+      >
+        <MethodIcon method={m.id} active={active} />
+        <span className={active ? "font-semibold" : ""}>{m.label}</span>
+      </button>
+    );
+  })}
+</div>
 
         <div className="mt-2 text-xs text-neutral-600">
           Empfehlung. {DEFAULTS[method].coffeeGrams}g . {formatTime(DEFAULTS[method].timeSeconds)}
