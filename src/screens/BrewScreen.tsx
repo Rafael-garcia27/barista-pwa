@@ -3,6 +3,56 @@ import type { Bean, BrewLog, TasteTag } from "../types";
 import { addBrew, listBeans, uuid } from "../db";
 import { makeSuggestion } from "../suggest";
 
+type BrewMethod =
+  | "Siebträger"
+  | "Aeropress"
+  | "Pour Over"
+  | "French Press"
+  | "Cold Brew Aeropress";
+
+const METHODS: { id: BrewMethod; label: string }[] = [
+  { id: "Aeropress", label: "Aeropress" },
+  { id: "Siebträger", label: "Siebträger" },
+  { id: "Pour Over", label: "Pour Over" },
+  { id: "French Press", label: "French Press" },
+  { id: "Cold Brew Aeropress", label: "Cold Brew Aeropress" },
+];
+
+const DEFAULTS: Record<
+  BrewMethod,
+  {
+    coffeeGrams: number;
+    timeSeconds: number;
+    hint: string;
+  }
+> = {
+  Siebträger: {
+    coffeeGrams: 17,
+    timeSeconds: 25,
+    hint: "Espresso Startpunkt. 17g in. 25s out. Danach feinjustieren über Mahlgrad.",
+  },
+  Aeropress: {
+    coffeeGrams: 18,
+    timeSeconds: 120,
+    hint: "Aeropress Startpunkt. 18g. 2:00. Danach. feiner oder länger für mehr Extraktion.",
+  },
+  "Pour Over": {
+    coffeeGrams: 20,
+    timeSeconds: 150,
+    hint: "Pour Over Startpunkt. 20g. 2:30. Ziel. gleichmäßiger Flow und stabile Zeit.",
+  },
+  "French Press": {
+    coffeeGrams: 30,
+    timeSeconds: 240,
+    hint: "French Press Startpunkt. 30g. 4:00. Eher grob mahlen. sanft pressen.",
+  },
+  "Cold Brew Aeropress": {
+    coffeeGrams: 20,
+    timeSeconds: 600,
+    hint: "Cold Brew Startpunkt. 20g. 10:00 Ziehzeit. Danach pressen. Eis optional.",
+  },
+};
+
 const TAGS: { id: TasteTag; label: string }[] = [
   { id: "sour", label: "sauer" },
   { id: "bitter", label: "bitter" },
@@ -11,11 +61,21 @@ const TAGS: { id: TasteTag; label: string }[] = [
   { id: "flat", label: "flach" },
 ];
 
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m <= 0) return `${seconds}s`;
+  return `${m}:${String(s).padStart(2, "0")} min`;
+}
+
 export default function BrewScreen() {
   const [beans, setBeans] = useState<Bean[]>([]);
   const [beanId, setBeanId] = useState<string>("");
-  const [coffeeGrams, setCoffeeGrams] = useState<number>(18);
-  const [timeSeconds, setTimeSeconds] = useState<number>(120);
+
+  const [method, setMethod] = useState<BrewMethod>("Siebträger");
+  const [coffeeGrams, setCoffeeGrams] = useState<number>(DEFAULTS["Siebträger"].coffeeGrams);
+  const [timeSeconds, setTimeSeconds] = useState<number>(DEFAULTS["Siebträger"].timeSeconds);
+
   const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [tags, setTags] = useState<TasteTag[]>([]);
   const [savedMessage, setSavedMessage] = useState<string>("");
@@ -30,6 +90,19 @@ export default function BrewScreen() {
   }, []);
 
   const selectedBean = useMemo(() => beans.find((b) => b.id === beanId) ?? null, [beans, beanId]);
+
+  const methodHint = DEFAULTS[method].hint;
+
+  function applyMethodDefaults(next: BrewMethod) {
+    const d = DEFAULTS[next];
+    setCoffeeGrams(d.coffeeGrams);
+    setTimeSeconds(d.timeSeconds);
+  }
+
+  function onChangeMethod(next: BrewMethod) {
+    setMethod(next);
+    applyMethodDefaults(next);
+  }
 
   function toggleTag(t: TasteTag) {
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -83,6 +156,24 @@ export default function BrewScreen() {
           ))}
         </select>
 
+        <div className="mt-3 text-xs text-neutral-600">Brühverfahren</div>
+        <select
+          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          value={method}
+          onChange={(e) => onChangeMethod(e.target.value as BrewMethod)}
+        >
+          {METHODS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+
+        <div className="mt-2 text-xs text-neutral-600">
+          Empfehlung. {DEFAULTS[method].coffeeGrams}g . {formatTime(DEFAULTS[method].timeSeconds)}
+        </div>
+        <div className="mt-1 text-xs text-neutral-500">{methodHint}</div>
+
         <div className="mt-3 grid grid-cols-2 gap-3">
           <NumberField label="Kaffee (g)" value={coffeeGrams} onChange={setCoffeeGrams} min={1} />
           <NumberField label="Dauer (s)" value={timeSeconds} onChange={setTimeSeconds} min={1} />
@@ -132,7 +223,7 @@ export default function BrewScreen() {
         </button>
 
         <div className="mt-2 text-xs text-neutral-600">
-          {selectedBean ? "Methode. Aeropress" : "Lege zuerst eine Bohne an"}
+          {selectedBean ? `Gewählt. ${method}` : "Lege zuerst eine Bohne an"}
         </div>
 
         {savedMessage && <div className="mt-2 text-xs text-emerald-700">{savedMessage}</div>}
