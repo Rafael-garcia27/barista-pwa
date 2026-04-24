@@ -127,7 +127,7 @@ export function BaristaAssistant({ isOpen, onClose }: BaristaAssistantProps) {
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && query.trim() && handleAsk(query.trim())}
               placeholder="Ask anything about coffee…"
-              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-400"
+              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base outline-none focus:border-amber-400"
             />
             <button
               type="button"
