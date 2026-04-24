@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { TabBar, type TabId } from './components/TabBar'
-import { BrewScreen } from './screens/BrewScreen'
+import { BrewScreen, type BrewScreenHandle } from './screens/BrewScreen'
 import { LogbookScreen } from './screens/LogbookScreen'
 import { BeansScreen } from './screens/BeansScreen'
 import { BaristaAssistant } from './components/BaristaAssistant'
@@ -11,12 +11,23 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('brew')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [devNotesOpen, setDevNotesOpen] = useState(false)
+  const [isBrewing, setIsBrewing] = useState(false)
 
+  const brewScreenRef = useRef<BrewScreenHandle>(null)
   const tabTouchStartY = useRef<number | null>(null)
 
   useEffect(() => {
     seedIfEmpty()
   }, [])
+
+  function handleTabChange(tab: TabId) {
+    if (tab === activeTab && tab === 'brew') {
+      // Re-tapping brew: go to setup (unless actively brewing — BrewScreen guards that)
+      brewScreenRef.current?.handleTabReselect()
+      return
+    }
+    setActiveTab(tab)
+  }
 
   function handleTabTouchStart(e: React.TouchEvent) {
     tabTouchStartY.current = e.touches[0].clientY
@@ -37,9 +48,20 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-gray-50 flex flex-col max-w-md mx-auto">
       <main className="flex-1 overflow-y-auto p-4 pb-2">
-        {activeTab === 'brew' && <BrewScreen onNavigateToTab={setActiveTab} />}
-        {activeTab === 'logbook' && <LogbookScreen />}
-        {activeTab === 'beans' && <BeansScreen />}
+        {/* All screens stay mounted so state (and the brew timer) persists across tab switches */}
+        <div className={activeTab !== 'brew' ? 'hidden' : undefined}>
+          <BrewScreen
+            ref={brewScreenRef}
+            onNavigateToTab={setActiveTab}
+            onBrewStatusChange={setIsBrewing}
+          />
+        </div>
+        <div className={activeTab !== 'logbook' ? 'hidden' : undefined}>
+          <LogbookScreen isActive={activeTab === 'logbook'} />
+        </div>
+        <div className={activeTab !== 'beans' ? 'hidden' : undefined}>
+          <BeansScreen isActive={activeTab === 'beans'} />
+        </div>
       </main>
 
       {/* Floating Barista button */}
@@ -52,7 +74,7 @@ export default function App() {
         ☕
       </button>
 
-      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      <TabBar activeTab={activeTab} onChange={handleTabChange} isBrewing={isBrewing} />
 
       {/* Dev Notes pull-tab — vertical lip on the left edge, bottom of screen */}
       <div
@@ -62,9 +84,7 @@ export default function App() {
         onTouchEnd={handleTabTouchEnd}
         onClick={() => setDevNotesOpen(true)}
       >
-        {/* Wider invisible touch target */}
         <div className="flex h-16 w-6 items-center justify-start">
-          {/* Visual lip */}
           <div className="h-10 w-[5px] rounded-r-full bg-gray-400 shadow-md" />
         </div>
       </div>

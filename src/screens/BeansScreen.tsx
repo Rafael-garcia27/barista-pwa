@@ -646,7 +646,7 @@ function RoastersView({ beans }: { beans: Bean[] }) {
 
 // ─── BEANS SCREEN ────────────────────────────────────────────────────────────
 
-export function BeansScreen() {
+export function BeansScreen({ isActive }: { isActive?: boolean }) {
   const [beans, setBeans] = useState<Bean[]>([])
   const [allBags, setAllBags] = useState<Bag[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -667,6 +667,7 @@ export function BeansScreen() {
   }
 
   useEffect(() => { refresh() }, [])
+  useEffect(() => { if (isActive) refresh() }, [isActive])
 
   function handleResetDb() {
     clearDatabase() // sets localStorage flag + reloads; DB is deleted on next load

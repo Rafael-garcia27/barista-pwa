@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ArrowUp, ArrowDown, ArrowLeftRight, Star } from 'lucide-react'
 import { EspressoIcon, V60Icon, AeroPressIcon } from '../components/MethodIcon'
 import { BrewAnimation } from '../components/BrewAnimation'
@@ -17,8 +17,13 @@ import type { TabId } from '../components/TabBar'
 
 type BrewStep = 'setup' | 'params' | 'brew' | 'evaluate' | 'result'
 
+export interface BrewScreenHandle {
+  handleTabReselect: () => void
+}
+
 interface BrewScreenProps {
   onNavigateToTab: (tab: TabId) => void
+  onBrewStatusChange?: (active: boolean) => void
 }
 
 function formatTimer(seconds: number): string {
@@ -38,7 +43,8 @@ function pickBestBag(bags: Bag[], beanId: string): Bag | null {
   })[0]
 }
 
-export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
+export const BrewScreen = forwardRef<BrewScreenHandle, BrewScreenProps>(
+function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
   const [step, setStep] = useState<BrewStep>('setup')
   const [beans, setBeans] = useState<Bean[]>([])
   const [bags, setBags] = useState<Bag[]>([])
@@ -62,6 +68,18 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
 
   const isRunningRef = useRef(isRunning)
   isRunningRef.current = isRunning
+
+  // Expose tab-reselect handler to parent: go to setup unless actively brewing
+  useImperativeHandle(ref, () => ({
+    handleTabReselect() {
+      if (step !== 'brew') resetAll()
+    },
+  }), [step]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tell parent whether a brew is in progress so the nav badge shows
+  useEffect(() => {
+    onBrewStatusChange?.(step === 'brew')
+  }, [step, onBrewStatusChange])
 
   useEffect(() => {
     Promise.all([listBeans(), listBags()]).then(([b, bags]) => {
@@ -743,4 +761,5 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
   }
 
   return null
-}
+})
+BrewScreen.displayName = 'BrewScreen'

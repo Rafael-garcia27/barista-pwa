@@ -23,7 +23,7 @@ function formatDate(iso: string): string {
   })
 }
 
-export function LogbookScreen() {
+export function LogbookScreen({ isActive }: { isActive?: boolean }) {
   const [beans, setBeans] = useState<Bean[]>([])
   const [bags, setBags] = useState<Bag[]>([])
   const [brews, setBrews] = useState<BrewLog[]>([])
@@ -48,6 +48,7 @@ export function LogbookScreen() {
   }
 
   useEffect(() => { refresh() }, [])
+  useEffect(() => { if (isActive) refresh() }, [isActive])
 
   const filtered = useMemo(() => {
     if (!beanFilter) return brews
