@@ -63,10 +63,6 @@ export function LogbookScreen() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Logbook</h1>
-      </div>
-
       <Card>
         <label className="text-xs font-medium text-gray-600">Filter by bean</label>
         <select

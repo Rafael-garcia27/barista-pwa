@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, ArrowDown, ArrowLeftRight, Star } from 'lucide-react'
+import { EspressoIcon, V60Icon, AeroPressIcon } from '../components/MethodIcon'
+import { BrewAnimation } from '../components/BrewAnimation'
 import type { Bag, Bean, BrewLog, BrewMethod, BrewParams, Diagnosis, PuckState, FlowState, TasteTag } from '../types'
 import { listBeans, listBags, addBrew, upsertBag, getBrewsByBagId } from '../db'
 import { computeRemainingGrams, isEffectivelyEmpty } from '../engine/stock'
@@ -187,24 +189,29 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
       ? getBeanSuitability(sortedBeans[0], selectedMethod)
       : null
 
+    const methodIconMap = {
+      espresso: <EspressoIcon size={22} />,
+      v60: <V60Icon size={22} />,
+      aeropress: <AeroPressIcon size={22} />,
+    }
+
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold text-gray-900">Brew</h1>
-
         <Card>
-          <div className="text-sm font-semibold mb-3">Select Method</div>
+          <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Method</div>
           <div className="flex gap-2">
             {BREW_METHODS.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleMethodSelect(id)}
-                className={`flex-1 rounded-xl border py-3 text-sm font-medium transition-colors ${
+                className={`flex-1 flex flex-col items-center gap-1.5 rounded-xl border py-3 text-xs font-medium transition-colors ${
                   selectedMethod === id
                     ? 'border-amber-400 bg-amber-50 text-amber-700'
-                    : 'border-gray-200 bg-white text-gray-700'
+                    : 'border-gray-200 bg-white text-gray-500'
                 }`}
               >
+                {methodIconMap[id]}
                 {label}
               </button>
             ))}
@@ -297,9 +304,16 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
   if (step === 'params' && params) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
           <button type="button" onClick={() => setStep('setup')} className="text-gray-400 text-sm">← Back</button>
-          <h1 className="text-lg font-semibold text-gray-900">Parameters</h1>
+          {selectedMethod && (
+            <div className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
+              {selectedMethod === 'espresso' && <EspressoIcon size={14} />}
+              {selectedMethod === 'v60' && <V60Icon size={14} />}
+              {selectedMethod === 'aeropress' && <AeroPressIcon size={14} />}
+              {BREW_METHODS.find(m => m.id === selectedMethod)?.label}
+            </div>
+          )}
         </div>
 
         {/* Barista Tip card */}
@@ -357,9 +371,12 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
       <div className="space-y-4">
         <h1 className="text-lg font-semibold text-gray-900">Brewing…</h1>
 
-        {/* Timer — dark warm card */}
-        <div className="rounded-2xl bg-stone-900 py-8 flex flex-col items-center gap-5">
-          <div className="text-7xl font-mono font-bold text-amber-400 tabular-nums tracking-tight leading-none">
+        {/* Timer + animation — dark warm card */}
+        <div className="rounded-2xl bg-stone-900 pt-5 pb-6 flex flex-col items-center gap-4">
+          <div className="w-40 h-40">
+            <BrewAnimation method={params.method} timerSeconds={timerSeconds} targetSeconds={params.timeSeconds} />
+          </div>
+          <div className="text-5xl font-mono font-bold text-amber-400 tabular-nums tracking-tight leading-none">
             {formatTimer(timerSeconds)}
           </div>
           <button
