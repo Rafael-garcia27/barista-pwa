@@ -31,7 +31,6 @@ export function LogbookScreen() {
 
   // bagId → Bean (via bag.beanId → bean)
   const bagToBeanMap = useMemo<Map<string, Bean>>(() => {
-    const bagMap = new Map(bags.map(b => [b.id, b]))
     const beanMap = new Map(beans.map(b => [b.id, b]))
     const result = new Map<string, Bean>()
     for (const bag of bags) {
