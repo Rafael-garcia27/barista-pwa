@@ -1,6 +1,7 @@
 import type { Bean, BrewMethod, BrewParams, StartingPoint } from '../types'
 import { ESPRESSO_STARTING_POINTS, V60_STARTING_POINTS, AEROPRESS_STARTING_POINTS } from './rules'
 import { getFreshness } from './freshness'
+import { getGrinderRecommendation } from './grinder'
 
 function originNote(origins: string[], method: BrewMethod): string | undefined {
   const has = (kws: string[]) => origins.some(o => kws.some(k => o.toLowerCase().includes(k)))
@@ -23,22 +24,25 @@ function originNote(origins: string[], method: BrewMethod): string | undefined {
 
 export function getStartingPoint(bean: Bean, method: BrewMethod, roastDate?: string): StartingPoint {
   const origins = bean.origins ?? []
-  const freshnessWarn = roastDate ? getFreshness(roastDate, method, bean.roastLevel, bean.process).warning : undefined
+  const freshnessResult = roastDate ? getFreshness(roastDate, method, bean.roastLevel, bean.process) : undefined
+  const freshnessWarn = freshnessResult?.warning
   const oNote = originNote(origins, method)
   const warning = [freshnessWarn, oNote].filter(Boolean).join(' ') || undefined
+
+  const grinderRec = getGrinderRecommendation(method, bean.roastLevel, freshnessResult?.stage)
 
   if (method === 'espresso') {
     const row = (ESPRESSO_STARTING_POINTS[bean.roastLevel][bean.process] ?? ESPRESSO_STARTING_POINTS[bean.roastLevel]['any'])!
     const doseOut = Math.round(row.doseIn * ((row.multiplierMin + row.multiplierMax) / 2) * 10) / 10
     const params: BrewParams = { method:'espresso', doseIn:row.doseIn, doseOut, timeSeconds:Math.round((row.timeMin+row.timeMax)/2), puckState:null, flowState:null }
-    return { params, rationale:`${row.doseIn}g in → ${doseOut}g out (${row.multiplierMin}–${row.multiplierMax}x) in ${row.timeMin}–${row.timeMax}s`, warning:[row.warning,warning].filter(Boolean).join(' ')||undefined }
+    return { params, rationale:`${row.doseIn}g in → ${doseOut}g out (${row.multiplierMin}–${row.multiplierMax}x) in ${row.timeMin}–${row.timeMax}s`, warning:[row.warning,warning].filter(Boolean).join(' ')||undefined, grinderRec }
   }
   if (method === 'v60') {
     const row = V60_STARTING_POINTS[bean.roastLevel]
     const params: BrewParams = { method:'v60', doseIn:row.doseIn, waterGrams:row.waterGrams, timeSeconds:Math.round((row.timeMin+row.timeMax)/2) }
-    return { params, rationale:`${row.doseIn}g coffee / ${row.waterGrams}g water (1:${Math.round(row.waterGrams/row.doseIn)}) — target ${Math.floor(row.timeMin/60)}:${String(row.timeMin%60).padStart(2,'0')}–${Math.floor(row.timeMax/60)}:${String(row.timeMax%60).padStart(2,'0')}`, warning }
+    return { params, rationale:`${row.doseIn}g coffee / ${row.waterGrams}g water (1:${Math.round(row.waterGrams/row.doseIn)}) — target ${Math.floor(row.timeMin/60)}:${String(row.timeMin%60).padStart(2,'0')}–${Math.floor(row.timeMax/60)}:${String(row.timeMax%60).padStart(2,'0')}`, warning, grinderRec }
   }
   const row = AEROPRESS_STARTING_POINTS[bean.roastLevel]
   const params: BrewParams = { method:'aeropress', doseIn:row.doseIn, waterGrams:row.waterGrams, timeSeconds:Math.round((row.timeMin+row.timeMax)/2) }
-  return { params, rationale:`${row.doseIn}g coffee / ${row.waterGrams}g water (1:${Math.round(row.waterGrams/row.doseIn)}) — steep ${row.timeMin}–${row.timeMax}s`, warning }
+  return { params, rationale:`${row.doseIn}g coffee / ${row.waterGrams}g water (1:${Math.round(row.waterGrams/row.doseIn)}) — steep ${row.timeMin}–${row.timeMax}s`, warning, grinderRec }
 }

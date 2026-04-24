@@ -35,6 +35,7 @@ export interface EspressoParams {
   timeSeconds: number
   puckState: PuckState | null
   flowState: FlowState | null
+  grinderClicks?: number
 }
 
 export interface V60Params {
@@ -42,6 +43,7 @@ export interface V60Params {
   doseIn: number
   waterGrams: number
   timeSeconds: number
+  grinderClicks?: number
 }
 
 export interface AeroPressParams {
@@ -49,6 +51,7 @@ export interface AeroPressParams {
   doseIn: number
   waterGrams: number
   timeSeconds: number
+  grinderClicks?: number
 }
 
 export type BrewParams = EspressoParams | V60Params | AeroPressParams
@@ -79,8 +82,17 @@ export interface Diagnosis {
   warning?: string
 }
 
+export interface GrinderRec {
+  clicksMin: number
+  clicksMax: number
+  clicksCenter: number
+  scaleRange: string
+  note?: string
+}
+
 export interface StartingPoint {
   params: BrewParams
   rationale: string
   warning?: string
+  grinderRec?: GrinderRec
 }

@@ -7,11 +7,12 @@ interface DialProps {
   step: number
   label: string
   onChange: (value: number) => void
+  format?: (value: number) => string
 }
 
 const PIXELS_PER_STEP = 10
 
-export function Dial({ value, min, max, step, label, onChange }: DialProps) {
+export function Dial({ value, min, max, step, label, onChange, format }: DialProps) {
   const touchStartY = useRef<number | null>(null)
   const startValue = useRef(value)
 
@@ -56,7 +57,7 @@ export function Dial({ value, min, max, step, label, onChange }: DialProps) {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {value}
+        {format ? format(value) : value}
       </div>
       <button
         type="button"

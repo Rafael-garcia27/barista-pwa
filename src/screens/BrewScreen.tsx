@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, ArrowDown, ArrowLeftRight, Star } from 'lucide-react'
 import { EspressoIcon, V60Icon, AeroPressIcon } from '../components/MethodIcon'
 import { BrewAnimation } from '../components/BrewAnimation'
-import type { Bag, Bean, BrewLog, BrewMethod, BrewParams, Diagnosis, PuckState, FlowState, TasteTag } from '../types'
+import type { Bag, Bean, BrewLog, BrewMethod, BrewParams, Diagnosis, PuckState, FlowState, TasteTag, StartingPoint } from '../types'
 import { listBeans, listBags, addBrew, upsertBag, getBrewsByBagId } from '../db'
 import { computeRemainingGrams, isEffectivelyEmpty } from '../engine/stock'
 import { getStartingPoint } from '../engine/recommendation'
@@ -10,6 +10,7 @@ import { diagnose } from '../engine/diagnosis'
 import { getFreshness, FRESHNESS_BADGE_CLASS } from '../engine/freshness'
 import { getBeanSuitability, sortBeansByMethod } from '../engine/suitability'
 import { BREW_METHODS, ROAST_LEVELS, PROCESSES, TASTE_TAGS, PUCK_STATES, FLOW_STATES } from '../constants'
+import { clicksToScale } from '../engine/grinder'
 import { Card } from '../components/Card'
 import { Dial } from '../components/Dial'
 import type { TabId } from '../components/TabBar'
@@ -45,7 +46,8 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
   const [selectedBag, setSelectedBag] = useState<Bag | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<BrewMethod | null>(null)
   const [params, setParams] = useState<BrewParams | null>(null)
-  const [startingPoint, setStartingPoint] = useState<{ rationale: string; warning?: string } | null>(null)
+  const [startingPoint, setStartingPoint] = useState<StartingPoint | null>(null)
+  const [grinderClicks, setGrinderClicks] = useState<number | null>(null)
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5>(3)
@@ -80,6 +82,7 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
     setSelectedMethod(null)
     setParams(null)
     setStartingPoint(null)
+    setGrinderClicks(null)
     setTimerSeconds(0)
     setIsRunning(false)
     setRating(3)
@@ -112,7 +115,8 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
     setSelectedBag(bag)
     const sp = getStartingPoint(selectedBean, selectedMethod, bag?.roastDate)
     setParams(sp.params)
-    setStartingPoint({ rationale: sp.rationale, warning: sp.warning })
+    setStartingPoint(sp)
+    setGrinderClicks(sp.grinderRec?.clicksCenter ?? null)
     setStep('params')
   }
 
@@ -134,9 +138,12 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
   async function handleSaveAndAnalyze() {
     if (!selectedBean || !params || !selectedBag) return
 
-    let finalParams = params
+    const gc = grinderClicks ?? undefined
+    let finalParams: BrewParams
     if (params.method === 'espresso') {
-      finalParams = { ...params, puckState, flowState }
+      finalParams = { ...params, puckState, flowState, grinderClicks: gc }
+    } else {
+      finalParams = { ...params, grinderClicks: gc }
     }
 
     const brew: BrewLog = {
@@ -359,6 +366,45 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
                 onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, timeSeconds: v } : prev)} />
             </div>
           )}
+        </Card>
+
+        {/* Grinder setting */}
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Grinder</div>
+            {startingPoint?.grinderRec && (
+              <div className="text-[10px] text-gray-400">
+                Rec: <span className="text-amber-600 font-semibold">{startingPoint.grinderRec.scaleRange}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="w-28 flex-shrink-0">
+              <Dial
+                value={grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25)}
+                min={0}
+                max={100}
+                step={1}
+                label="Scale (0–9)"
+                format={v => (v / 10).toFixed(1)}
+                onChange={setGrinderClicks}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xl font-bold text-gray-800 tabular-nums">
+                {grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25)}
+                <span className="text-sm font-normal text-gray-400 ml-1">clicks</span>
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                Scale {clicksToScale(grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25))}
+              </div>
+              {startingPoint?.grinderRec?.note && (
+                <div className="text-xs text-amber-700 leading-snug mt-1.5">
+                  {startingPoint.grinderRec.note}
+                </div>
+              )}
+            </div>
+          </div>
         </Card>
 
         <button type="button" onClick={handleStartBrew}
@@ -585,6 +631,16 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
           </div>
           <div className="mt-1 text-sm text-gray-600">{diagnosis.summary}</div>
         </Card>
+
+        {savedBrew.params.grinderClicks != null && (
+          <div className="flex items-center gap-2 text-sm text-gray-500 px-1">
+            <span className="text-gray-400 text-xs">Grinder</span>
+            <span className="font-semibold text-gray-700">
+              {clicksToScale(savedBrew.params.grinderClicks)}
+            </span>
+            <span className="text-gray-400 text-xs">({savedBrew.params.grinderClicks} clicks)</span>
+          </div>
+        )}
 
         {savedBrew.isBest && (
           <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">

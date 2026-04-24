@@ -1,11 +1,22 @@
 import type { Bean, BrewLog, Diagnosis, Suggestion, EspressoParams, V60Params, AeroPressParams } from '../types'
 import { THRESHOLDS } from './rules'
 import { getFreshness } from './freshness'
+import { clicksToScale, analyzeGrinderOutOfRange, GRINDER_RANGES } from './grinder'
+
+function grinderTip(gc: number | undefined, targetDelta: number, rangeMin: number, rangeMax: number): string | undefined {
+  if (gc == null) return undefined
+  const target = Math.max(rangeMin, Math.min(rangeMax, gc + targetDelta))
+  if (target === gc) return undefined
+  const dir = targetDelta > 0 ? 'coarser' : 'finer'
+  return `Go ${Math.abs(gc - target)} clicks ${dir}: ${clicksToScale(target)} (${target} clicks) on your grinder.`
+}
 
 function espressoDiagnosis(params: EspressoParams, tags: string[]): { score: number; suggestions: Suggestion[]; warning?: string } {
   const suggestions: Suggestion[] = []
   const ratio = params.doseOut / params.doseIn
   const { ratioMin, ratioMax, timeMin, timeMax } = THRESHOLDS.espresso
+  const gc = params.grinderClicks
+  const { min: gMin, max: gMax } = GRINDER_RANGES.espresso
 
   const sour = tags.includes('sour')
   const bitter = tags.includes('bitter')
@@ -17,10 +28,10 @@ function espressoDiagnosis(params: EspressoParams, tags: string[]): { score: num
 
   if (params.timeSeconds < timeMin) {
     score -= 20
-    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Shot pulled too fast — grind finer to slow extraction.', tip: 'Aim for 25–35s.' })
+    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Shot pulled too fast — grind finer to slow extraction.', tip: grinderTip(gc, -3, gMin, gMax) ?? 'Aim for 25–35s.' })
   } else if (params.timeSeconds > timeMax) {
     score -= 20
-    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Shot pulled too slow — grind coarser to speed extraction.', tip: 'Aim for 25–35s.' })
+    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Shot pulled too slow — grind coarser to speed extraction.', tip: grinderTip(gc, +3, gMin, gMax) ?? 'Aim for 25–35s.' })
   }
 
   if (ratio < ratioMin) {
@@ -33,11 +44,11 @@ function espressoDiagnosis(params: EspressoParams, tags: string[]): { score: num
 
   if (sour && !bitter) {
     score -= 15
-    suggestions.push({ parameter: 'Extraction', direction: 'increase', reason: 'Sour notes indicate under-extraction.', tip: 'Grind finer or increase dose.' })
+    suggestions.push({ parameter: 'Extraction', direction: 'increase', reason: 'Sour notes indicate under-extraction.', tip: grinderTip(gc, -2, gMin, gMax) ?? 'Grind finer or increase dose.' })
   }
   if (bitter && !sour) {
     score -= 15
-    suggestions.push({ parameter: 'Extraction', direction: 'decrease', reason: 'Bitter notes indicate over-extraction.', tip: 'Grind coarser or reduce dose.' })
+    suggestions.push({ parameter: 'Extraction', direction: 'decrease', reason: 'Bitter notes indicate over-extraction.', tip: grinderTip(gc, +2, gMin, gMax) ?? 'Grind coarser or reduce dose.' })
   }
   if (harsh) {
     score -= 10
@@ -55,11 +66,18 @@ function espressoDiagnosis(params: EspressoParams, tags: string[]): { score: num
   if (params.flowState === 'choked') {
     score -= 10
     warning = 'Shot choked — grind is too fine for this bean/dose.'
-    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Choked flow means grind is too fine.', tip: 'Go coarser in small steps.' })
+    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Choked flow means grind is too fine.', tip: grinderTip(gc, +4, gMin, gMax) ?? 'Go coarser in small steps.' })
   }
   if (params.flowState === 'fast') {
     score -= 10
-    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Fast flow means grind is too coarse.', tip: 'Go finer in small steps.' })
+    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Fast flow means grind is too coarse.', tip: grinderTip(gc, -4, gMin, gMax) ?? 'Go finer in small steps.' })
+  }
+
+  if (gc != null) {
+    const outOfRange = analyzeGrinderOutOfRange(gc, 'espresso')
+    if (outOfRange) {
+      suggestions.push({ parameter: 'Grinder Range', direction: outOfRange.direction, reason: outOfRange.reason })
+    }
   }
 
   return { score: Math.max(0, score), suggestions, warning }
@@ -69,6 +87,8 @@ function filterDiagnosis(params: V60Params | AeroPressParams, tags: string[], me
   const suggestions: Suggestion[] = []
   const t = THRESHOLDS[method]
   const ratio = params.waterGrams / params.doseIn
+  const gc = params.grinderClicks
+  const { min: gMin, max: gMax } = GRINDER_RANGES[method]
 
   let score = 100
 
@@ -82,23 +102,30 @@ function filterDiagnosis(params: V60Params | AeroPressParams, tags: string[], me
 
   if (params.timeSeconds < t.timeMin) {
     score -= 20
-    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Brew finished too fast — grind finer for better extraction.' })
+    suggestions.push({ parameter: 'Grind', direction: 'decrease', reason: 'Brew finished too fast — grind finer for better extraction.', tip: grinderTip(gc, -5, gMin, gMax) })
   } else if (params.timeSeconds > t.timeMax) {
     score -= 20
-    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Brew took too long — grind coarser to improve flow.' })
+    suggestions.push({ parameter: 'Grind', direction: 'increase', reason: 'Brew took too long — grind coarser to improve flow.', tip: grinderTip(gc, +5, gMin, gMax) })
   }
 
   if (tags.includes('sour')) {
     score -= 15
-    suggestions.push({ parameter: 'Extraction', direction: 'increase', reason: 'Sour taste — grind finer or increase steep time.' })
+    suggestions.push({ parameter: 'Extraction', direction: 'increase', reason: 'Sour taste — grind finer or increase steep time.', tip: grinderTip(gc, -3, gMin, gMax) })
   }
   if (tags.includes('bitter')) {
     score -= 15
-    suggestions.push({ parameter: 'Extraction', direction: 'decrease', reason: 'Bitter taste — grind coarser or reduce steep time.' })
+    suggestions.push({ parameter: 'Extraction', direction: 'decrease', reason: 'Bitter taste — grind coarser or reduce steep time.', tip: grinderTip(gc, +3, gMin, gMax) })
   }
   if (tags.includes('watery') || tags.includes('flat')) {
     score -= 10
     suggestions.push({ parameter: 'Dose', direction: 'increase', reason: 'Weak cup — try more coffee or less water.' })
+  }
+
+  if (gc != null) {
+    const outOfRange = analyzeGrinderOutOfRange(gc, method)
+    if (outOfRange) {
+      suggestions.push({ parameter: 'Grinder Range', direction: outOfRange.direction, reason: outOfRange.reason })
+    }
   }
 
   return { score: Math.max(0, score), suggestions }
