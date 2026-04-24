@@ -48,6 +48,7 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
   const [params, setParams] = useState<BrewParams | null>(null)
   const [startingPoint, setStartingPoint] = useState<StartingPoint | null>(null)
   const [grinderClicks, setGrinderClicks] = useState<number | null>(null)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5>(3)
@@ -83,6 +84,7 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
     setParams(null)
     setStartingPoint(null)
     setGrinderClicks(null)
+    setIsLoadingHistory(false)
     setTimerSeconds(0)
     setIsRunning(false)
     setRating(3)
@@ -109,14 +111,23 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
     if (selectedBean) setSelectedBag(pickBestBag(bags, selectedBean.id))
   }
 
-  function handleSetupConfirm() {
-    if (!selectedBean || !selectedMethod) return
+  async function handleSetupConfirm() {
+    if (!selectedBean || !selectedMethod || isLoadingHistory) return
+    setIsLoadingHistory(true)
     const bag = selectedBag ?? pickBestBag(bags, selectedBean.id)
     setSelectedBag(bag)
-    const sp = getStartingPoint(selectedBean, selectedMethod, bag?.roastDate)
+
+    // Fetch all brews for this bean's bags to build a personalized recommendation
+    const beanBagIds = bags.filter(b => b.beanId === selectedBean.id).map(b => b.id)
+    const brewArrays = await Promise.all(beanBagIds.map(id => getBrewsByBagId(id)))
+    const previousBrews = brewArrays.flat()
+
+    const sp = getStartingPoint(selectedBean, selectedMethod, bag?.roastDate, previousBrews)
     setParams(sp.params)
     setStartingPoint(sp)
-    setGrinderClicks(sp.grinderRec?.clicksCenter ?? null)
+    // Prefer the personal brew's actual grinder setting; fall back to freshness-adjusted rec center
+    setGrinderClicks(sp.params.grinderClicks ?? sp.grinderRec?.clicksCenter ?? null)
+    setIsLoadingHistory(false)
     setStep('params')
   }
 
@@ -302,10 +313,10 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
         <button
           type="button"
           onClick={handleSetupConfirm}
-          disabled={!selectedBean || !selectedMethod}
+          disabled={!selectedBean || !selectedMethod || isLoadingHistory}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
-          Start →
+          {isLoadingHistory ? 'Loading…' : 'Start →'}
         </button>
       </div>
     )
@@ -329,15 +340,32 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
 
         {/* Barista Tip card */}
         <div className="rounded-2xl bg-stone-900 px-5 py-4 space-y-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">☕</span>
-            <span className="text-[10px] font-bold tracking-widest text-amber-400 uppercase">Pro Tip from the Barista</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              {startingPoint?.source === 'personal'
+                ? <Star size={15} className="fill-amber-400 text-amber-400 flex-shrink-0" />
+                : <span className="text-lg leading-none">☕</span>
+              }
+              <span className="text-[10px] font-bold tracking-widest text-amber-400 uppercase">
+                {startingPoint?.source === 'personal' ? 'Your Best Brew' : 'Pro Tip from the Barista'}
+              </span>
+            </div>
+            {startingPoint?.source === 'personal' && (
+              <span className="flex-shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                Personalized
+              </span>
+            )}
           </div>
           <p className="text-sm text-stone-200 leading-relaxed">{startingPoint?.rationale}</p>
           {startingPoint?.warning && (
             <div className="rounded-xl bg-amber-500/15 border border-amber-500/25 px-3 py-2.5 text-sm text-amber-300 leading-relaxed">
               {startingPoint.warning}
             </div>
+          )}
+          {startingPoint?.source === 'default' && (startingPoint.brewCountForMethod ?? 0) > 0 && (
+            <p className="text-[11px] text-stone-500 leading-snug">
+              {startingPoint.brewCountForMethod} brew{startingPoint.brewCountForMethod === 1 ? '' : 's'} logged with this method — rate ≥4★ to personalize next time.
+            </p>
           )}
         </div>
 

@@ -95,4 +95,8 @@ export interface StartingPoint {
   rationale: string
   warning?: string
   grinderRec?: GrinderRec
+  source: 'personal' | 'default'
+  personalBrewRating?: 1 | 2 | 3 | 4 | 5
+  personalBrewDate?: string
+  brewCountForMethod?: number  // total brews for this method, used to nudge the user to rate
 }
