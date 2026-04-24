@@ -706,7 +706,36 @@ export function BeansScreen() {
 
   return (
     <div className="space-y-4">
-      {dbError ? (
+      {/* Screen header */}
+      <div className="flex items-center justify-between h-10">
+        <h1 className="text-xl font-bold text-gray-900">Shelf</h1>
+        {view === 'shelf' && !dbError && (
+          <button type="button" onClick={() => setShowForm(prev => !prev)}
+            className="rounded-xl bg-amber-600 px-3 py-2 text-sm font-medium text-white">
+            {showForm ? 'Cancel' : '+ Add Bean'}
+          </button>
+        )}
+      </div>
+
+      {/* View tabs */}
+      <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        <button type="button"
+          onClick={() => { setView('shelf'); setShowForm(false) }}
+          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+            view === 'shelf' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+          }`}>
+          Shelf
+        </button>
+        <button type="button"
+          onClick={() => { setView('roasters'); setShowForm(false) }}
+          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+            view === 'roasters' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+          }`}>
+          Roasters
+        </button>
+      </div>
+
+      {dbError && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 space-y-2">
           <div className="font-medium">Database error — data cannot be loaded.</div>
           <div className="text-xs text-red-600">{dbError}</div>
@@ -715,39 +744,7 @@ export function BeansScreen() {
             Reset database &amp; reload
           </button>
         </div>
-      ) : (
-        <div className="text-right">
-          <button type="button" onClick={handleResetDb}
-            className="text-xs text-gray-400 underline underline-offset-2">
-            Reset database
-          </button>
-        </div>
       )}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-          <button type="button"
-            onClick={() => { setView('shelf'); setShowForm(false) }}
-            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-              view === 'shelf' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}>
-            Shelf
-          </button>
-          <button type="button"
-            onClick={() => { setView('roasters'); setShowForm(false) }}
-            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-              view === 'roasters' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}>
-            Roasters
-          </button>
-        </div>
-
-        {view === 'shelf' && (
-          <button type="button" onClick={() => setShowForm(prev => !prev)}
-            className="rounded-xl bg-amber-600 px-3 py-2 text-sm font-medium text-white">
-            {showForm ? 'Cancel' : '+ Add Bean'}
-          </button>
-        )}
-      </div>
 
       {view === 'roasters' ? (
         <RoastersView beans={beans} />

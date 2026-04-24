@@ -197,6 +197,10 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
 
     return (
       <div className="space-y-4">
+        <div className="flex items-center h-10">
+          <h1 className="text-xl font-bold text-gray-900">Brew</h1>
+        </div>
+
         <Card>
           <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Method</div>
           <div className="flex gap-2">
