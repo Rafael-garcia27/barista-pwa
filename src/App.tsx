@@ -52,20 +52,21 @@ export default function App() {
         ☕
       </button>
 
-      {/* Nav area with hidden pull-tab */}
-      <div className="relative border-t border-gray-200 bg-white">
-        {/* Pull-tab trigger — looks like a small switch, opens Dev Notes on swipe-up */}
-        <div
-          className="absolute -top-4 left-4 z-20 flex h-7 w-9 items-end justify-center pb-1 cursor-pointer"
-          onTouchStart={handleTabTouchStart}
-          onTouchMove={handleTabTouchMove}
-          onTouchEnd={handleTabTouchEnd}
-          onClick={() => setDevNotesOpen(true)}
-        >
-          <div className="h-[3px] w-7 rounded-full bg-gray-300" />
-        </div>
+      <TabBar activeTab={activeTab} onChange={setActiveTab} />
 
-        <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      {/* Dev Notes pull-tab — vertical lip on the left edge, bottom of screen */}
+      <div
+        className="fixed bottom-24 left-0 z-20 flex items-center"
+        onTouchStart={handleTabTouchStart}
+        onTouchMove={handleTabTouchMove}
+        onTouchEnd={handleTabTouchEnd}
+        onClick={() => setDevNotesOpen(true)}
+      >
+        {/* Wider invisible touch target */}
+        <div className="flex h-16 w-6 items-center justify-start">
+          {/* Visual lip */}
+          <div className="h-10 w-[5px] rounded-r-full bg-gray-400 shadow-md" />
+        </div>
       </div>
 
       <BaristaAssistant isOpen={assistantOpen} onClose={() => setAssistantOpen(false)} />
