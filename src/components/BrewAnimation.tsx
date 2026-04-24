@@ -1,208 +1,230 @@
 import type { BrewMethod } from '../types'
 
-interface BrewAnimationProps {
-  method: BrewMethod
-  timerSeconds: number
-  targetSeconds: number
-}
+const COFFEE  = '#6b3a2a'
+const CREMA   = '#d97706'
+const GHOST   = '#ead7c5'   // light brown placeholder fill
+const WATER   = '#bfdbfe'   // soft blue water
+const WATER_G = '#dbeafe'   // ghost blue (empty part of filter/cylinder)
+const OUTLINE = '#1c1917'
 
-export function BrewAnimation({ method, timerSeconds, targetSeconds }: BrewAnimationProps) {
+interface Props { method: BrewMethod; timerSeconds: number; targetSeconds: number }
+
+export function BrewAnimation({ method, timerSeconds, targetSeconds }: Props) {
   const fillRatio = Math.min(1, timerSeconds / targetSeconds)
-  const isPast = timerSeconds > targetSeconds * 1.1
-
-  const coffeeColor = isPast ? '#7c2d12' : '#6b3a2a'
-  const cremaColor = '#d97706'
-  const outlineColor = '#1c1917'
-
-  if (method === 'espresso') {
-    return <EspressoAnim fillRatio={fillRatio} coffeeColor={coffeeColor} cremaColor={cremaColor} outlineColor={outlineColor} />
-  }
-  if (method === 'v60') {
-    return <V60Anim fillRatio={fillRatio} coffeeColor={coffeeColor} outlineColor={outlineColor} />
-  }
-  return <AeroPressAnim fillRatio={fillRatio} coffeeColor={coffeeColor} outlineColor={outlineColor} />
+  if (method === 'espresso') return <EspressoAnim r={fillRatio} />
+  if (method === 'v60')      return <V60Anim r={fillRatio} />
+  return <AeroPressAnim r={fillRatio} />
 }
 
-function EspressoAnim({ fillRatio, coffeeColor, cremaColor, outlineColor }: {
-  fillRatio: number; coffeeColor: string; cremaColor: string; outlineColor: string
-}) {
-  const cupX = 18, cupY = 22, cupW = 54, cupH = 52
-  const cupBottom = cupY + cupH
-  const fillH = fillRatio * cupH
-  const fillY = cupBottom - fillH
-  const cremaH = fillRatio > 0.08 ? Math.min(7, fillH * 0.12) : 0
+// ─── ESPRESSO ────────────────────────────────────────────────────────────────
+function EspressoAnim({ r }: { r: number }) {
+  // Tapered cup: wider at top, narrower at bottom — gives a real cup silhouette
+  const cx = 43
+  const topY = 22,  topHW = 29   // top rim
+  const botY = 80,  botHW = 22   // bottom
+  const cupH = botY - topY       // 58
+
+  const cupPath = `M ${cx - topHW},${topY} L ${cx + topHW},${topY} L ${cx + botHW},${botY} L ${cx - botHW},${botY} Z`
+
+  const fillH  = r * cupH
+  const fillY  = botY - fillH
+  const cremaH = r > 0.08 ? Math.min(6, fillH * 0.1) : 0
 
   return (
-    <svg viewBox="0 0 90 110" className="w-full h-full" style={{ maxHeight: 180 }}>
+    <svg viewBox="0 0 92 112" className="w-full h-full" style={{ maxHeight: 180 }}>
       <defs>
-        <clipPath id="esp-cup">
-          <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="5" />
+        <clipPath id="esp-clip">
+          <path d={cupPath} />
         </clipPath>
       </defs>
-      {/* Coffee fill */}
+
+      {/* Ghost fill — full cup interior in light brown */}
+      <rect x={cx - topHW} y={topY} width={topHW * 2} height={cupH}
+        fill={GHOST} clipPath="url(#esp-clip)" />
+
+      {/* Coffee fill rising from bottom */}
       {fillH > cremaH && (
-        <rect
-          x={cupX} y={fillY + cremaH} width={cupW} height={fillH - cremaH}
-          fill={coffeeColor} clipPath="url(#esp-cup)"
-        />
+        <rect x={cx - topHW} y={fillY + cremaH} width={topHW * 2} height={fillH - cremaH}
+          fill={COFFEE} clipPath="url(#esp-clip)" />
       )}
-      {/* Crema */}
+
+      {/* Crema layer on top of coffee */}
       {cremaH > 0 && (
-        <rect
-          x={cupX} y={fillY} width={cupW} height={cremaH}
-          fill={cremaColor} clipPath="url(#esp-cup)" opacity="0.9"
-        />
+        <rect x={cx - topHW} y={fillY} width={topHW * 2} height={cremaH}
+          fill={CREMA} clipPath="url(#esp-clip)" opacity="0.9" />
       )}
+
       {/* Cup outline */}
-      <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="5"
-        fill="none" stroke={outlineColor} strokeWidth="2.5" />
+      <path d={cupPath} fill="none" stroke={OUTLINE} strokeWidth="2.5" strokeLinejoin="round" />
+
+      {/* Top rim line */}
+      <line x1={cx - topHW - 2} y1={topY} x2={cx + topHW + 2} y2={topY}
+        stroke={OUTLINE} strokeWidth="3" strokeLinecap="round" />
+
       {/* Handle */}
       <path
-        d={`M${cupX + cupW} ${cupY + 14} Q${cupX + cupW + 18} ${cupY + 14} ${cupX + cupW + 18} ${cupY + 26} Q${cupX + cupW + 18} ${cupY + 38} ${cupX + cupW} ${cupY + 38}`}
-        fill="none" stroke={outlineColor} strokeWidth="2.5" strokeLinecap="round"
+        d={`M ${cx + botHW + 1},${topY + 16} Q ${cx + botHW + 19},${topY + 16} ${cx + botHW + 19},${topY + 28} Q ${cx + botHW + 19},${topY + 40} ${cx + botHW + 1},${topY + 40}`}
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" strokeLinecap="round"
       />
+
       {/* Saucer */}
-      <ellipse cx={cupX + cupW / 2} cy={cupBottom + 9} rx="36" ry="5"
-        fill="none" stroke={outlineColor} strokeWidth="2" />
+      <ellipse cx={cx} cy={botY + 9} rx="35" ry="5"
+        fill="none" stroke={OUTLINE} strokeWidth="2" />
     </svg>
   )
 }
 
-function V60Anim({ fillRatio, coffeeColor, outlineColor }: {
-  fillRatio: number; coffeeColor: string; outlineColor: string
-}) {
-  // Filter cone — top half
-  const tipX = 50, tipY = 62
-  const coneTopY = 8, coneHalfW = 36
+// ─── V60 ─────────────────────────────────────────────────────────────────────
+function V60Anim({ r }: { r: number }) {
+  const cx = 50
 
-  // Water in filter drains as fillRatio increases
-  const drainRatio = Math.max(0, 1 - fillRatio)
-  const waterSurfaceY = coneTopY + (1 - drainRatio) * (tipY - coneTopY)
-  const halfWAtSurface = coneHalfW * drainRatio
+  // Filter cone — centered
+  const coneTopY = 6, tipY = 60, coneHW = 37
 
-  // Cup — bottom half
-  const cupX = 16, cupY = 72, cupW = 58, cupH = 38
-  const cupBottom = cupY + cupH
-  const cupFillH = fillRatio * cupH
-  const cupFillY = cupBottom - cupFillH
+  // Water in filter drains as r increases (starts full, ends empty)
+  const waterSurfaceY  = coneTopY + r * (tipY - coneTopY)
+  const waterHW        = coneHW * (1 - r)
+
+  // Cup — centered below cone
+  const cupHW = 30, cupY = 72, cupH = 42
+  const cupX  = cx - cupHW, cupW = cupHW * 2
+  const cupFillH = r * cupH
+  const cupFillY = cupY + cupH - cupFillH
 
   return (
-    <svg viewBox="0 0 100 120" className="w-full h-full" style={{ maxHeight: 200 }}>
+    <svg viewBox="0 0 100 124" className="w-full h-full" style={{ maxHeight: 200 }}>
       <defs>
-        <clipPath id="v60-cone">
-          <polygon points={`${tipX - coneHalfW},${coneTopY} ${tipX + coneHalfW},${coneTopY} ${tipX},${tipY}`} />
+        <clipPath id="v60-cone-clip">
+          <polygon points={`${cx - coneHW},${coneTopY} ${cx + coneHW},${coneTopY} ${cx},${tipY}`} />
         </clipPath>
-        <clipPath id="v60-cup">
+        <clipPath id="v60-cup-clip">
           <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="4" />
         </clipPath>
       </defs>
 
-      {/* Water in filter */}
-      {drainRatio > 0.02 && (
+      {/* Ghost water in filter — full cone, very pale blue */}
+      <polygon
+        points={`${cx - coneHW},${coneTopY} ${cx + coneHW},${coneTopY} ${cx},${tipY}`}
+        fill={WATER_G} clipPath="url(#v60-cone-clip)"
+      />
+
+      {/* Actual water — stronger blue, shrinks from the top as it drains */}
+      {waterHW > 0.5 && (
         <polygon
-          points={`${tipX - halfWAtSurface},${waterSurfaceY} ${tipX + halfWAtSurface},${waterSurfaceY} ${tipX},${tipY}`}
-          fill={coffeeColor} clipPath="url(#v60-cone)" opacity="0.85"
+          points={`${cx - waterHW},${waterSurfaceY} ${cx + waterHW},${waterSurfaceY} ${cx},${tipY}`}
+          fill={WATER} clipPath="url(#v60-cone-clip)"
         />
       )}
+
       {/* Filter cone outline */}
       <polygon
-        points={`${tipX - coneHalfW},${coneTopY} ${tipX + coneHalfW},${coneTopY} ${tipX},${tipY}`}
-        fill="none" stroke={outlineColor} strokeWidth="2.5" strokeLinejoin="round"
+        points={`${cx - coneHW},${coneTopY} ${cx + coneHW},${coneTopY} ${cx},${tipY}`}
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" strokeLinejoin="round"
       />
       {/* Center rib */}
-      <line x1={tipX} y1={coneTopY + 6} x2={tipX} y2={tipY - 4}
-        stroke={outlineColor} strokeWidth="1" opacity="0.3" />
+      <line x1={cx} y1={coneTopY + 8} x2={cx} y2={tipY - 5}
+        stroke={OUTLINE} strokeWidth="1" opacity="0.25" />
 
-      {/* Drip */}
-      {fillRatio > 0.05 && fillRatio < 0.95 && (
-        <circle cx={tipX} cy={tipY + 5} r="2" fill={coffeeColor} opacity="0.7" />
+      {/* Drip line between filter and cup */}
+      {r > 0.04 && r < 0.97 && (
+        <line x1={cx} y1={tipY + 2} x2={cx} y2={cupY - 2}
+          stroke={COFFEE} strokeWidth="1.5" strokeDasharray="2 3" opacity="0.5" />
       )}
 
-      {/* Cup fill */}
-      <rect x={cupX} y={cupFillY} width={cupW} height={cupFillH}
-        fill={coffeeColor} clipPath="url(#v60-cup)" />
+      {/* Ghost fill in cup — light brown */}
+      <rect x={cupX} y={cupY} width={cupW} height={cupH}
+        fill={GHOST} clipPath="url(#v60-cup-clip)" />
+
+      {/* Coffee rising in cup */}
+      {cupFillH > 0 && (
+        <rect x={cupX} y={cupFillY} width={cupW} height={cupFillH}
+          fill={COFFEE} clipPath="url(#v60-cup-clip)" />
+      )}
+
       {/* Cup outline */}
       <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="4"
-        fill="none" stroke={outlineColor} strokeWidth="2.5" />
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" />
+
       {/* Cup handle */}
       <path
-        d={`M${cupX + cupW} ${cupY + 10} Q${cupX + cupW + 14} ${cupY + 10} ${cupX + cupW + 14} ${cupY + 19} Q${cupX + cupW + 14} ${cupY + 28} ${cupX + cupW} ${cupY + 28}`}
-        fill="none" stroke={outlineColor} strokeWidth="2.5" strokeLinecap="round"
+        d={`M ${cupX + cupW} ${cupY + 10} Q ${cupX + cupW + 14} ${cupY + 10} ${cupX + cupW + 14} ${cupY + 21} Q ${cupX + cupW + 14} ${cupY + 31} ${cupX + cupW} ${cupY + 31}`}
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" strokeLinecap="round"
       />
     </svg>
   )
 }
 
-function AeroPressAnim({ fillRatio, coffeeColor, outlineColor }: {
-  fillRatio: number; coffeeColor: string; outlineColor: string
-}) {
-  // Chamber
-  const chamberX = 28, chamberY = 5, chamberW = 44, chamberH = 60
-  const chamberBottom = chamberY + chamberH
+// ─── AEROPRESS ───────────────────────────────────────────────────────────────
+function AeroPressAnim({ r }: { r: number }) {
+  const cx = 50
 
-  // Plunger moves from top to bottom
-  const plungerH = 8
-  const plungerTravel = chamberH - plungerH
-  const plungerY = chamberY + fillRatio * plungerTravel
+  // Cylinder — centered
+  const cylHW = 22, cylY = 6, cylH = 54
+  const cylX  = cx - cylHW, cylW = cylHW * 2
 
-  // Coffee in chamber (below plunger)
-  const coffeeInChamberY = plungerY + plungerH
-  const coffeeInChamberH = chamberBottom - coffeeInChamberY
+  // Water level in cylinder drops as r increases (starts full at top, drains to bottom)
+  const waterH        = (1 - r) * cylH
+  const waterY        = cylY + cylH - waterH   // bottom-anchored, surface drops
 
-  // Cup below
-  const cupX = 18, cupY = 75, cupW = 64, cupH = 36
-  const cupBottom = cupY + cupH
-  const cupFillH = fillRatio * cupH
-  const cupFillY = cupBottom - cupFillH
+  // Cup — centered below cylinder, slightly wider
+  const cupHW = 28, cupY = 72, cupH = 42
+  const cupX  = cx - cupHW, cupW = cupHW * 2
+  const cupFillH = r * cupH
+  const cupFillY = cupY + cupH - cupFillH
 
   return (
-    <svg viewBox="0 0 100 120" className="w-full h-full" style={{ maxHeight: 200 }}>
+    <svg viewBox="0 0 100 124" className="w-full h-full" style={{ maxHeight: 200 }}>
       <defs>
-        <clipPath id="ap-chamber">
-          <rect x={chamberX} y={chamberY} width={chamberW} height={chamberH} rx="6" />
+        <clipPath id="ap-cyl-clip">
+          <rect x={cylX} y={cylY} width={cylW} height={cylH} rx="5" />
         </clipPath>
-        <clipPath id="ap-cup">
+        <clipPath id="ap-cup-clip">
           <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="4" />
         </clipPath>
       </defs>
 
-      {/* Coffee in chamber */}
-      {coffeeInChamberH > 0 && (
-        <rect
-          x={chamberX + 1} y={coffeeInChamberY} width={chamberW - 2} height={coffeeInChamberH}
-          fill={coffeeColor} clipPath="url(#ap-chamber)" opacity="0.9"
-        />
-      )}
-      {/* Chamber outline */}
-      <rect x={chamberX} y={chamberY} width={chamberW} height={chamberH} rx="6"
-        fill="none" stroke={outlineColor} strokeWidth="2.5" />
+      {/* Ghost water — full cylinder in pale blue */}
+      <rect x={cylX} y={cylY} width={cylW} height={cylH}
+        fill={WATER_G} clipPath="url(#ap-cyl-clip)" />
 
-      {/* Plunger rod */}
-      <rect x={47} y={Math.max(0, plungerY - 16)} width={6} height={Math.min(16, plungerY)}
-        rx="2" fill={outlineColor} />
-      {/* Handle bar */}
-      {plungerY > 10 && (
-        <rect x={40} y={Math.max(0, plungerY - 18)} width={20} height={4} rx="2" fill={outlineColor} />
-      )}
-      {/* Plunger disc */}
-      <rect x={chamberX + 2} y={plungerY} width={chamberW - 4} height={plungerH} rx="3"
-        fill="#44403c" />
-
-      {/* Drip */}
-      {fillRatio > 0.05 && fillRatio < 0.95 && (
-        <circle cx={50} cy={cupY - 4} r="2" fill={coffeeColor} opacity="0.7" />
+      {/* Actual water — stronger blue, level drops from bottom anchor */}
+      {waterH > 0.5 && (
+        <rect x={cylX} y={waterY} width={cylW} height={waterH}
+          fill={WATER} clipPath="url(#ap-cyl-clip)" />
       )}
 
-      {/* Cup fill */}
-      <rect x={cupX} y={cupFillY} width={cupW} height={cupFillH}
-        fill={coffeeColor} clipPath="url(#ap-cup)" />
+      {/* Cylinder outline */}
+      <rect x={cylX} y={cylY} width={cylW} height={cylH} rx="5"
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" />
+
+      {/* Cap / filter plate at cylinder bottom */}
+      <rect x={cylX - 3} y={cylY + cylH - 5} width={cylW + 6} height={7} rx="3"
+        fill={OUTLINE} />
+
+      {/* Drip from cylinder to cup */}
+      {r > 0.04 && r < 0.97 && (
+        <line x1={cx} y1={cylY + cylH + 2} x2={cx} y2={cupY - 2}
+          stroke={COFFEE} strokeWidth="1.5" strokeDasharray="2 3" opacity="0.5" />
+      )}
+
+      {/* Ghost fill in cup — light brown */}
+      <rect x={cupX} y={cupY} width={cupW} height={cupH}
+        fill={GHOST} clipPath="url(#ap-cup-clip)" />
+
+      {/* Coffee rising in cup */}
+      {cupFillH > 0 && (
+        <rect x={cupX} y={cupFillY} width={cupW} height={cupFillH}
+          fill={COFFEE} clipPath="url(#ap-cup-clip)" />
+      )}
+
       {/* Cup outline */}
       <rect x={cupX} y={cupY} width={cupW} height={cupH} rx="4"
-        fill="none" stroke={outlineColor} strokeWidth="2.5" />
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" />
+
       {/* Cup handle */}
       <path
-        d={`M${cupX + cupW} ${cupY + 8} Q${cupX + cupW + 15} ${cupY + 8} ${cupX + cupW + 15} ${cupY + 18} Q${cupX + cupW + 15} ${cupY + 28} ${cupX + cupW} ${cupY + 28}`}
-        fill="none" stroke={outlineColor} strokeWidth="2.5" strokeLinecap="round"
+        d={`M ${cupX + cupW} ${cupY + 10} Q ${cupX + cupW + 15} ${cupY + 10} ${cupX + cupW + 15} ${cupY + 21} Q ${cupX + cupW + 15} ${cupY + 31} ${cupX + cupW} ${cupY + 31}`}
+        fill="none" stroke={OUTLINE} strokeWidth="2.5" strokeLinecap="round"
       />
     </svg>
   )
