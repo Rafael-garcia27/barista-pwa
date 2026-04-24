@@ -1,86 +1,141 @@
-import { useEffect, useMemo, useState } from "react";
-import type { Bean, BrewLog } from "../types";
-import { deleteBrew, listBeans, listBrews } from "../db";
+import { useEffect, useMemo, useState } from 'react'
+import { Star } from 'lucide-react'
+import type { Bag, Bean, BrewLog } from '../types'
+import { listBeans, listBags, listBrews, deleteBrew } from '../db'
+import { BREW_METHODS } from '../constants'
+import { Card } from '../components/Card'
 
-export default function LogbookScreen() {
-  const [beans, setBeans] = useState<Bean[]>([]);
-  const [brews, setBrews] = useState<BrewLog[]>([]);
-  const [beanFilter, setBeanFilter] = useState<string>("");
+function formatParams(brew: BrewLog): string {
+  if (brew.params.method === 'espresso') {
+    const { doseIn, doseOut, timeSeconds } = brew.params
+    return `${doseIn}g → ${doseOut}g in ${timeSeconds}s (ratio ${(doseOut / doseIn).toFixed(1)}x)`
+  }
+  const { doseIn, waterGrams, timeSeconds } = brew.params
+  return `${doseIn}g coffee · ${waterGrams}g water · ${timeSeconds}s`
+}
 
-  useEffect(() => {
-    (async () => {
-      const b = await listBeans();
-      const l = await listBrews();
-      setBeans(b);
-      setBrews(l);
-    })();
-  }, []);
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
-  const filtered = useMemo(() => {
-    if (!beanFilter) return brews;
-    return brews.filter((x) => x.beanId === beanFilter);
-  }, [brews, beanFilter]);
+export function LogbookScreen() {
+  const [beans, setBeans] = useState<Bean[]>([])
+  const [bags, setBags] = useState<Bag[]>([])
+  const [brews, setBrews] = useState<BrewLog[]>([])
+  const [beanFilter, setBeanFilter] = useState<string>('')
 
-  async function onDelete(id: string) {
-    await deleteBrew(id);
-    const l = await listBrews();
-    setBrews(l);
+  // bagId → Bean (via bag.beanId → bean)
+  const bagToBeanMap = useMemo<Map<string, Bean>>(() => {
+    const bagMap = new Map(bags.map(b => [b.id, b]))
+    const beanMap = new Map(beans.map(b => [b.id, b]))
+    const result = new Map<string, Bean>()
+    for (const bag of bags) {
+      const bean = beanMap.get(bag.beanId)
+      if (bean) result.set(bag.id, bean)
+    }
+    return result
+  }, [beans, bags])
+
+  async function refresh() {
+    const [b, bags, l] = await Promise.all([listBeans(), listBags(), listBrews()])
+    setBeans(b)
+    setBags(bags)
+    setBrews(l)
   }
 
-  function beanName(beanId: string) {
-    return beans.find((b) => b.id === beanId)?.name ?? "Unbekannt";
+  useEffect(() => { refresh() }, [])
+
+  const filtered = useMemo(() => {
+    if (!beanFilter) return brews
+    // Filter brews whose bag belongs to the selected bean
+    const beanBagIds = new Set(bags.filter(b => b.beanId === beanFilter).map(b => b.id))
+    return brews.filter(b => beanBagIds.has(b.bagId))
+  }, [brews, bags, beanFilter])
+
+  async function onDelete(id: string) {
+    await deleteBrew(id)
+    refresh()
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="text-sm font-semibold">Filter</div>
-        <div className="mt-2 text-xs text-neutral-600">Bohne</div>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-gray-900">Logbook</h1>
+      </div>
+
+      <Card>
+        <label className="text-xs font-medium text-gray-600">Filter by bean</label>
         <select
-          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
           value={beanFilter}
-          onChange={(e) => setBeanFilter(e.target.value)}
+          onChange={e => setBeanFilter(e.target.value)}
         >
-          <option value="">Alle</option>
-          {beans.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
+          <option value="">All beans</option>
+          {beans.map(b => (
+            <option key={b.id} value={b.id}>{b.name}{b.roaster ? ` — ${b.roaster}` : ''}</option>
           ))}
         </select>
-      </div>
+      </Card>
 
       <div className="space-y-3">
         {filtered.length === 0 && (
-          <div className="rounded-2xl border bg-white p-4 text-sm text-neutral-700">
-            Noch keine Einträge. Logge deinen ersten Brew.
-          </div>
+          <Card>
+            <div className="text-sm text-gray-500 text-center py-4">
+              No brews logged yet. Brew something!
+            </div>
+          </Card>
         )}
 
-        {filtered.map((b) => (
-          <div key={b.id} className="rounded-2xl border bg-white p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">{beanName(b.beanId)}</div>
-                <div className="mt-1 text-xs text-neutral-600">
-                  {new Date(b.createdAt).toLocaleString()} . {b.coffeeGrams} g . {b.timeSeconds} s
-                </div>
-                <div className="mt-2 text-xs text-neutral-700">
-                  Rating: <span className="font-semibold">{b.rating}</span>
-                  {b.tasteTags.length > 0 ? `. Tags: ${b.tasteTags.join(", ")}` : ""}
-                </div>
-              </div>
+        {filtered.map(brew => {
+          const bean = bagToBeanMap.get(brew.bagId)
+          const beanName = bean?.name ?? 'Unknown bean'
+          const methodLabel = BREW_METHODS.find(m => m.id === brew.params.method)?.label ?? brew.params.method
 
-              <button
-                onClick={() => onDelete(b.id)}
-                className="rounded-xl border px-3 py-2 text-xs text-neutral-700"
-              >
-                Löschen
-              </button>
-            </div>
-          </div>
-        ))}
+          return (
+            <Card key={brew.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold truncate">{beanName}</span>
+                    <span className="text-xs text-gray-500">{methodLabel}</span>
+                    {brew.isBest && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        <Star size={10} className="fill-amber-500 text-amber-500" />
+                        Best
+                      </span>
+                    )}
+                  </div>
+                  {bean?.roaster && (
+                    <div className="text-xs text-gray-400 mt-0.5">{bean.roaster}</div>
+                  )}
+                  <div className="mt-1 text-xs text-gray-500">{formatDate(brew.createdAt)}</div>
+                  <div className="mt-1 text-xs text-gray-600">{formatParams(brew)}</div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="text-xs text-gray-600">
+                      {'★'.repeat(brew.rating)}{'☆'.repeat(5 - brew.rating)}
+                    </span>
+                    {brew.tasteTags.length > 0 && (
+                      <span className="text-xs text-gray-500">{brew.tasteTags.join(', ')}</span>
+                    )}
+                  </div>
+                  {brew.notes && (
+                    <div className="mt-1 text-xs text-gray-500 italic">{brew.notes}</div>
+                  )}
+                </div>
+                <button type="button" onClick={() => onDelete(brew.id)}
+                  className="flex-shrink-0 rounded-xl border border-gray-200 px-3 py-1.5 text-xs text-gray-600">
+                  Delete
+                </button>
+              </div>
+            </Card>
+          )
+        })}
       </div>
     </div>
-  );
+  )
 }

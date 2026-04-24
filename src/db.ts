@@ -1,100 +1,153 @@
-import { openDB, type DBSchema } from "idb";
-import type { Bean, BrewLog } from "./types";
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { Bean, Bag, BrewLog } from './types'
 
-type BaristaDB = DBSchema & {
-  beans: {
-    key: string;
-    value: Bean;
-    indexes: { "by-updatedAt": number };
-  };
-  brews: {
-    key: string;
-    value: BrewLog;
-    indexes: { "by-createdAt": number; "by-beanId": string };
-  };
-  settings: {
-    key: string;
-    value: { key: string; value: unknown };
-  };
-};
-
-const DB_NAME = "barista-pwa";
-const DB_VERSION = 1;
-
-export async function getDb() {
-  return openDB<BaristaDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const beans = db.createObjectStore("beans", { keyPath: "id" });
-      beans.createIndex("by-updatedAt", "updatedAt");
-
-      const brews = db.createObjectStore("brews", { keyPath: "id" });
-      brews.createIndex("by-createdAt", "createdAt");
-      brews.createIndex("by-beanId", "beanId");
-
-      db.createObjectStore("settings", { keyPath: "key" });
-    },
-  });
+interface BaristaDB extends DBSchema {
+  beans: { key: string; value: Bean; indexes: { 'by-createdAt': string } }
+  bags: { key: string; value: Bag; indexes: { 'by-beanId': string; 'by-createdAt': string } }
+  brews: { key: string; value: BrewLog; indexes: { 'by-createdAt': string; 'by-bagId': string } }
 }
 
-export function uuid() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
+const DB_NAME = 'barista-app'
+const RESET_FLAG = '_barista_reset_db'
+
+if (localStorage.getItem(RESET_FLAG)) {
+  localStorage.removeItem(RESET_FLAG)
+  indexedDB.deleteDatabase(DB_NAME)
 }
 
-export async function seedIfEmpty() {
-  const db = await getDb();
-  const count = await db.count("beans");
-  if (count > 0) return;
+let dbPromise: Promise<IDBPDatabase<BaristaDB>> | null = null
 
-  const now = Date.now();
-  const demo: Bean = {
-    id: uuid(),
-    name: "Demo Bean",
-    roaster: "Demo Roaster",
-    defaultMethodId: "aeropress",
-    createdAt: now,
-    updatedAt: now,
-  };
+function getDb(): Promise<IDBPDatabase<BaristaDB>> {
+  if (!dbPromise) {
+    dbPromise = openDB<BaristaDB>(DB_NAME, 1, {
+      upgrade(db) {
+        const beans = db.createObjectStore('beans', { keyPath: 'id' })
+        beans.createIndex('by-createdAt', 'createdAt')
 
-  await db.put("beans", demo);
+        const bags = db.createObjectStore('bags', { keyPath: 'id' })
+        bags.createIndex('by-beanId', 'beanId')
+        bags.createIndex('by-createdAt', 'createdAt')
+
+        const brews = db.createObjectStore('brews', { keyPath: 'id' })
+        brews.createIndex('by-createdAt', 'createdAt')
+        brews.createIndex('by-bagId', 'bagId')
+      },
+      blocked() { window.location.reload() },
+      blocking(_cv, _nv, event) {
+        ;(event.target as IDBDatabase).close()
+        dbPromise = null
+      },
+    }).catch(err => { dbPromise = null; throw err })
+  }
+  return dbPromise
 }
 
-export async function listBeans() {
-  const db = await getDb();
-  const beans = await db.getAllFromIndex("beans", "by-updatedAt");
-  return beans.sort((a, b) => b.updatedAt - a.updatedAt);
+// ─── BEANS ───────────────────────────────────────────────────────────────────
+
+export async function listBeans(): Promise<Bean[]> {
+  const db = await getDb()
+  const all = await db.getAll('beans')
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
-export async function upsertBean(bean: Bean) {
-  const db = await getDb();
-  await db.put("beans", bean);
+export async function getBeanById(id: string): Promise<Bean | undefined> {
+  const db = await getDb()
+  return db.get('beans', id)
 }
 
-export async function deleteBean(beanId: string) {
-  const db = await getDb();
-  await db.delete("beans", beanId);
+export async function upsertBean(bean: Bean): Promise<void> {
+  const db = await getDb()
+  await db.put('beans', bean)
 }
 
-export async function listBrews(limit = 200) {
-  const db = await getDb();
-  const brews = await db.getAllFromIndex("brews", "by-createdAt");
-  brews.sort((a, b) => b.createdAt - a.createdAt);
-  return brews.slice(0, limit);
+export async function deleteBean(id: string): Promise<void> {
+  const db = await getDb()
+  await db.delete('beans', id)
 }
 
-export async function listBrewsByBean(beanId: string, limit = 200) {
-  const db = await getDb();
-  const brews = await db.getAllFromIndex("brews", "by-beanId", beanId);
-  brews.sort((a, b) => b.createdAt - a.createdAt);
-  return brews.slice(0, limit);
+// ─── BAGS ────────────────────────────────────────────────────────────────────
+
+export async function listBags(): Promise<Bag[]> {
+  const db = await getDb()
+  const all = await db.getAll('bags')
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
-export async function addBrew(brew: BrewLog) {
-  const db = await getDb();
-  await db.put("brews", brew);
+export async function getBagsByBeanId(beanId: string): Promise<Bag[]> {
+  const db = await getDb()
+  const all = await db.getAllFromIndex('bags', 'by-beanId', beanId)
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
-export async function deleteBrew(brewId: string) {
-  const db = await getDb();
-  await db.delete("brews", brewId);
+export async function upsertBag(bag: Bag): Promise<void> {
+  const db = await getDb()
+  await db.put('bags', bag)
+}
+
+export async function deleteBag(id: string): Promise<void> {
+  const db = await getDb()
+  await db.delete('bags', id)
+}
+
+// ─── BREWS ───────────────────────────────────────────────────────────────────
+
+export async function listBrews(): Promise<BrewLog[]> {
+  const db = await getDb()
+  const all = await db.getAll('brews')
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export async function getBrewsByBagId(bagId: string): Promise<BrewLog[]> {
+  const db = await getDb()
+  const all = await db.getAllFromIndex('brews', 'by-bagId', bagId)
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export async function addBrew(brew: BrewLog): Promise<void> {
+  const db = await getDb()
+  await db.add('brews', brew)
+}
+
+export async function updateBrew(brew: BrewLog): Promise<void> {
+  const db = await getDb()
+  await db.put('brews', brew)
+}
+
+export async function deleteBrew(id: string): Promise<void> {
+  const db = await getDb()
+  await db.delete('brews', id)
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+
+export function clearDatabase(): void {
+  localStorage.setItem(RESET_FLAG, '1')
+  window.location.reload()
+}
+
+// ─── SEED ────────────────────────────────────────────────────────────────────
+
+export async function seedIfEmpty(): Promise<void> {
+  const db = await getDb()
+  const count = await db.count('beans')
+  if (count > 0) return
+  const beanId = crypto.randomUUID()
+  const bean: Bean = {
+    id: beanId,
+    name: 'Demo Espresso Blend',
+    roaster: 'Sample Roaster',
+    origins: ['Brazil', 'Colombia'],
+    roastLevel: 'medium',
+    process: 'washed',
+    preferredMethod: 'espresso',
+    createdAt: new Date().toISOString(),
+  }
+  const bag: Bag = {
+    id: crypto.randomUUID(),
+    beanId,
+    depleted: false,
+    createdAt: new Date().toISOString(),
+  }
+  await db.add('beans', bean)
+  await db.add('bags', bag)
 }
