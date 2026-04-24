@@ -734,16 +734,10 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
           </Card>
         )}
 
-        <div className="flex gap-3">
-          <button type="button" onClick={resetAll}
-            className="flex-1 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
-            Brew Again
-          </button>
-          <button type="button" onClick={() => onNavigateToTab('beans')}
-            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700">
-            Add Bean
-          </button>
-        </div>
+        <button type="button" onClick={resetAll}
+          className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
+          Brew Again
+        </button>
       </div>
     )
   }
