@@ -3,10 +3,12 @@ import { TabBar, type TabId } from './components/TabBar'
 import { BrewScreen } from './screens/BrewScreen'
 import { LogbookScreen } from './screens/LogbookScreen'
 import { BeansScreen } from './screens/BeansScreen'
+import { BaristaAssistant } from './components/BaristaAssistant'
 import { seedIfEmpty } from './db'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('brew')
+  const [assistantOpen, setAssistantOpen] = useState(false)
 
   useEffect(() => {
     seedIfEmpty()
@@ -19,7 +21,20 @@ export default function App() {
         {activeTab === 'logbook' && <LogbookScreen />}
         {activeTab === 'beans' && <BeansScreen />}
       </main>
+
+      {/* Floating Barista button */}
+      <button
+        type="button"
+        onClick={() => setAssistantOpen(true)}
+        className="fixed bottom-20 right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-amber-600 text-xl shadow-lg active:bg-amber-700"
+        aria-label="Ask the Barista"
+      >
+        ☕
+      </button>
+
       <TabBar activeTab={activeTab} onChange={setActiveTab} />
+
+      <BaristaAssistant isOpen={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   )
 }
