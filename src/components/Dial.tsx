@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+
 interface DialProps {
   value: number
   min: number
@@ -7,30 +9,62 @@ interface DialProps {
   onChange: (value: number) => void
 }
 
+const PIXELS_PER_STEP = 10
+
 export function Dial({ value, min, max, step, label, onChange }: DialProps) {
-  function decrement() {
-    const next = Math.round((value - step) * 100) / 100
-    if (next >= min) onChange(next)
+  const touchStartY = useRef<number | null>(null)
+  const startValue = useRef(value)
+
+  function clamp(v: number) {
+    return Math.min(max, Math.max(min, Math.round(v * 100) / 100))
   }
-  function increment() {
-    const next = Math.round((value + step) * 100) / 100
-    if (next <= max) onChange(next)
+
+  function inc() { onChange(clamp(value + step)) }
+  function dec() { onChange(clamp(value - step)) }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartY.current = e.touches[0].clientY
+    startValue.current = value
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (touchStartY.current === null) return
+    const dy = touchStartY.current - e.touches[0].clientY
+    const steps = Math.round(dy / PIXELS_PER_STEP)
+    onChange(clamp(startValue.current + steps * step))
+  }
+
+  function handleTouchEnd() {
+    touchStartY.current = null
   }
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={decrement}
-          className="w-8 h-8 rounded-full border border-gray-200 text-gray-600 text-lg leading-none flex items-center justify-center">
-          −
-        </button>
-        <span className="w-14 text-center text-lg font-semibold tabular-nums">{value}</span>
-        <button type="button" onClick={increment}
-          className="w-8 h-8 rounded-full border border-gray-200 text-gray-600 text-lg leading-none flex items-center justify-center">
-          +
-        </button>
+    <div className="flex flex-col items-center select-none py-2">
+      <div className="text-[9px] font-bold uppercase tracking-wide text-gray-400 mb-1.5 text-center leading-tight px-1">
+        {label}
       </div>
+      <button
+        type="button"
+        onClick={inc}
+        className="text-amber-500 text-[10px] py-1.5 w-full text-center active:text-amber-700 leading-none"
+      >
+        ▲
+      </button>
+      <div
+        className="touch-none cursor-ns-resize py-1 text-3xl font-bold tabular-nums text-gray-900 leading-none text-center min-w-[2.5rem]"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {value}
+      </div>
+      <button
+        type="button"
+        onClick={dec}
+        className="text-amber-500 text-[10px] py-1.5 w-full text-center active:text-amber-700 leading-none"
+      >
+        ▼
+      </button>
     </div>
   )
 }

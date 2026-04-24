@@ -299,31 +299,40 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setStep('setup')} className="text-gray-400 text-sm">← Back</button>
-          <h1 className="text-lg font-semibold text-gray-900">Adjust Parameters</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Parameters</h1>
         </div>
 
-        {startingPoint?.warning && (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-            {startingPoint.warning}
+        {/* Barista Tip card */}
+        <div className="rounded-2xl bg-stone-900 px-5 py-4 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">☕</span>
+            <span className="text-[10px] font-bold tracking-widest text-amber-400 uppercase">Pro Tip from the Barista</span>
           </div>
-        )}
+          <p className="text-sm text-stone-200 leading-relaxed">{startingPoint?.rationale}</p>
+          {startingPoint?.warning && (
+            <div className="rounded-xl bg-amber-500/15 border border-amber-500/25 px-3 py-2.5 text-sm text-amber-300 leading-relaxed">
+              {startingPoint.warning}
+            </div>
+          )}
+        </div>
 
+        {/* Parameter dials */}
         <Card>
-          <div className="text-xs text-gray-500 mb-3">{startingPoint?.rationale}</div>
-
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 text-center mb-3">
+            Swipe up / down to adjust
+          </div>
           {params.method === 'espresso' && (
-            <div className="flex justify-around">
-              <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose in (g)"
+            <div className="grid grid-cols-3 divide-x divide-gray-100">
+              <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose In (g)"
                 onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseIn: v } : prev)} />
-              <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose out (g)"
+              <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose Out (g)"
                 onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseOut: v } : prev)} />
               <Dial value={params.timeSeconds} min={10} max={60} step={1} label="Time (s)"
                 onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, timeSeconds: v } : prev)} />
             </div>
           )}
-
           {(params.method === 'v60' || params.method === 'aeropress') && (
-            <div className="flex justify-around">
+            <div className="grid grid-cols-3 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={10} max={25} step={0.5} label="Coffee (g)"
                 onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, doseIn: v } : prev)} />
               <Dial value={params.waterGrams} min={100} max={400} step={5} label="Water (g)"
@@ -336,7 +345,7 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
 
         <button type="button" onClick={handleStartBrew}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
-          Start Brew
+          Start Brew →
         </button>
       </div>
     )
@@ -348,33 +357,37 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
       <div className="space-y-4">
         <h1 className="text-lg font-semibold text-gray-900">Brewing…</h1>
 
-        <Card className="text-center py-6">
-          <div className="text-6xl font-mono font-bold text-gray-900 tabular-nums">
+        {/* Timer — dark warm card */}
+        <div className="rounded-2xl bg-stone-900 py-8 flex flex-col items-center gap-5">
+          <div className="text-7xl font-mono font-bold text-amber-400 tabular-nums tracking-tight leading-none">
             {formatTimer(timerSeconds)}
           </div>
           <button
             type="button"
             onClick={() => setIsRunning(prev => !prev)}
-            className={`mt-4 rounded-xl px-6 py-2.5 text-sm font-medium ${
-              isRunning ? 'bg-gray-200 text-gray-700' : 'bg-amber-600 text-white'
+            className={`rounded-2xl px-8 py-2.5 text-sm font-semibold transition-colors ${
+              isRunning ? 'bg-stone-700 text-stone-300' : 'bg-amber-500 text-white'
             }`}
           >
             {isRunning ? 'Pause' : 'Resume'}
           </button>
-        </Card>
+        </div>
 
+        {/* Live adjust */}
         <Card>
-          <div className="text-xs font-medium text-gray-600 mb-3">Adjust live</div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center mb-2">
+            Adjust live
+          </div>
           {params.method === 'espresso' && (
-            <div className="flex justify-around">
-              <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose in (g)"
+            <div className="grid grid-cols-2 divide-x divide-gray-100">
+              <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose In (g)"
                 onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseIn: v } : prev)} />
-              <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose out (g)"
+              <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose Out (g)"
                 onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseOut: v } : prev)} />
             </div>
           )}
           {(params.method === 'v60' || params.method === 'aeropress') && (
-            <div className="flex justify-around">
+            <div className="grid grid-cols-2 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={10} max={25} step={0.5} label="Coffee (g)"
                 onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, doseIn: v } : prev)} />
               <Dial value={params.waterGrams} min={100} max={400} step={5} label="Water (g)"
@@ -384,7 +397,7 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
         </Card>
 
         <button type="button" onClick={handleDone}
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white">
+          className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
           Done
         </button>
       </div>
@@ -393,9 +406,50 @@ export function BrewScreen({ onNavigateToTab }: BrewScreenProps) {
 
   // ─── STEP: EVALUATE ────────────────────────────────────────────────────────
   if (step === 'evaluate' && params) {
+    type FeedbackSeverity = 'good' | 'warn' | 'bad'
+    const brewFeedback: Array<{ label: string; severity: FeedbackSeverity }> = []
+
+    if (params.method === 'espresso') {
+      const ratio = params.doseOut / params.doseIn
+      if (ratio < 1.5) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — too short`, severity: 'bad' })
+      else if (ratio <= 2.5) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — perfect`, severity: 'good' })
+      else brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — too long`, severity: 'warn' })
+
+      const t = params.timeSeconds
+      if (t < 22) brewFeedback.push({ label: `${t}s — too fast`, severity: 'bad' })
+      else if (t <= 35) brewFeedback.push({ label: `${t}s — good time`, severity: 'good' })
+      else brewFeedback.push({ label: `${t}s — too slow`, severity: 'warn' })
+    } else {
+      const ratio = params.waterGrams / params.doseIn
+      if (ratio < 13) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — very strong`, severity: 'warn' })
+      else if (ratio <= 17) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — ideal strength`, severity: 'good' })
+      else brewFeedback.push({ label: `1:${ratio.toFixed(0)} — weak`, severity: 'warn' })
+
+      const t = params.timeSeconds
+      const [tMin, tMax] = params.method === 'v60' ? [150, 240] : [60, 120]
+      if (t < tMin) brewFeedback.push({ label: `${formatTimer(t)} — a bit fast`, severity: 'warn' })
+      else if (t <= tMax) brewFeedback.push({ label: `${formatTimer(t)} — good time`, severity: 'good' })
+      else brewFeedback.push({ label: `${formatTimer(t)} — a bit slow`, severity: 'warn' })
+    }
+
+    const feedbackClass: Record<FeedbackSeverity, string> = {
+      good: 'bg-green-100 text-green-800',
+      warn: 'bg-amber-100 text-amber-800',
+      bad: 'bg-red-100 text-red-700',
+    }
+
     return (
       <div className="space-y-4">
         <h1 className="text-lg font-semibold text-gray-900">How was it?</h1>
+
+        {/* Quick brew feedback */}
+        <div className="flex flex-wrap gap-2">
+          {brewFeedback.map((f, i) => (
+            <span key={i} className={`rounded-full px-3 py-1 text-xs font-semibold ${feedbackClass[f.severity]}`}>
+              {f.label}
+            </span>
+          ))}
+        </div>
 
         <Card>
           <div className="text-sm font-medium text-gray-700 mb-2">Rating</div>
