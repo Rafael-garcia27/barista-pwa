@@ -7,47 +7,32 @@ import { BaristaAssistant } from './components/BaristaAssistant'
 import { DevNotes } from './components/DevNotes'
 import { seedIfEmpty } from './db'
 
-const EDGE_THRESHOLD = 28   // px from left edge to start gesture
-const SWIPE_MIN_DX = 55     // px horizontal movement to trigger open
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('brew')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [devNotesOpen, setDevNotesOpen] = useState(false)
 
-  const touchStartX = useRef<number | null>(null)
-  const touchStartY = useRef<number | null>(null)
-  const edgeSwipeActive = useRef(false)
+  const tabTouchStartY = useRef<number | null>(null)
 
   useEffect(() => {
     seedIfEmpty()
   }, [])
 
-  useEffect(() => {
-    function onTouchStart(e: TouchEvent) {
-      const x = e.touches[0].clientX
-      touchStartX.current = x
-      touchStartY.current = e.touches[0].clientY
-      edgeSwipeActive.current = x < EDGE_THRESHOLD
-    }
+  function handleTabTouchStart(e: React.TouchEvent) {
+    tabTouchStartY.current = e.touches[0].clientY
+  }
 
-    function onTouchMove(e: TouchEvent) {
-      if (!edgeSwipeActive.current || touchStartX.current === null || touchStartY.current === null) return
-      const dx = e.touches[0].clientX - touchStartX.current
-      const dy = Math.abs(e.touches[0].clientY - touchStartY.current)
-      if (dx > SWIPE_MIN_DX && dy < dx * 0.6) {
-        setDevNotesOpen(true)
-        edgeSwipeActive.current = false
-      }
+  function handleTabTouchMove(e: React.TouchEvent) {
+    if (tabTouchStartY.current === null) return
+    if (e.touches[0].clientY - tabTouchStartY.current < -38) {
+      setDevNotesOpen(true)
+      tabTouchStartY.current = null
     }
+  }
 
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
-    window.addEventListener('touchmove', onTouchMove, { passive: true })
-    return () => {
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchmove', onTouchMove)
-    }
-  }, [])
+  function handleTabTouchEnd() {
+    tabTouchStartY.current = null
+  }
 
   return (
     <div className="min-h-dvh bg-gray-50 flex flex-col max-w-md mx-auto">
@@ -67,7 +52,21 @@ export default function App() {
         ☕
       </button>
 
-      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      {/* Nav area with hidden pull-tab */}
+      <div className="relative border-t border-gray-200 bg-white">
+        {/* Pull-tab trigger — looks like a small switch, opens Dev Notes on swipe-up */}
+        <div
+          className="absolute -top-4 left-4 z-20 flex h-7 w-9 items-end justify-center pb-1 cursor-pointer"
+          onTouchStart={handleTabTouchStart}
+          onTouchMove={handleTabTouchMove}
+          onTouchEnd={handleTabTouchEnd}
+          onClick={() => setDevNotesOpen(true)}
+        >
+          <div className="h-[3px] w-7 rounded-full bg-gray-300" />
+        </div>
+
+        <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      </div>
 
       <BaristaAssistant isOpen={assistantOpen} onClose={() => setAssistantOpen(false)} />
       <DevNotes isOpen={devNotesOpen} onClose={() => setDevNotesOpen(false)} />
