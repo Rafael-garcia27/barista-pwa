@@ -4,6 +4,7 @@ import type { Bag, Bean, BrewLog } from '../types'
 import { listBeans, listBags, listBrews, deleteBrew } from '../db'
 import { BREW_METHODS } from '../constants'
 import { Card } from '../components/Card'
+import { DecafBadge } from '../components/DecafBadge'
 
 function formatParams(brew: BrewLog): string {
   if (brew.params.method === 'espresso') {
@@ -108,6 +109,7 @@ export function LogbookScreen({ isActive }: { isActive?: boolean }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold truncate">{beanName}</span>
+                    {bean?.isDecaf && <DecafBadge />}
                     <span className="text-xs text-gray-500">{methodLabel}</span>
                     {brew.isBest && (
                       <span className="flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">

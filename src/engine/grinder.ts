@@ -38,17 +38,22 @@ export interface GrinderRecommendation {
   note?: string
 }
 
+// Decaf beans are more porous — they extract faster and need a slightly coarser grind.
+const DECAF_OFFSET = 2
+
 export function getGrinderRecommendation(
   method: BrewMethod,
   roastLevel: RoastLevel,
   freshnessStage?: FreshnessStage,
+  isDecaf = false,
 ): GrinderRecommendation {
   const range = GRINDER_RANGES[method]
   const baseCenter = (range.min + range.max) / 2
   const roastAdj = ROAST_OFFSET[roastLevel]
   const freshAdj = freshnessStage ? (FRESHNESS_OFFSET[freshnessStage] ?? 0) : 0
 
-  const center = Math.round(baseCenter + roastAdj + freshAdj)
+  const decafAdj = isDecaf ? DECAF_OFFSET : 0
+  const center = Math.round(baseCenter + roastAdj + freshAdj + decafAdj)
   // Spread: espresso is very sensitive (±3), AeroPress medium (±5), V60 more forgiving (±7)
   const spread = method === 'espresso' ? 3 : method === 'aeropress' ? 5 : 7
 
@@ -57,7 +62,9 @@ export function getGrinderRecommendation(
   const clicksCenter = Math.max(range.min, Math.min(range.max, center))
 
   let note: string | undefined
-  if (freshnessStage === 'aging' || freshnessStage === 'old') {
+  if (isDecaf) {
+    note = 'Decaf beans are more porous — extract faster. Start coarser than you would for regular.'
+  } else if (freshnessStage === 'aging' || freshnessStage === 'old') {
     note = 'Aging beans lose solubility — grind slightly finer than usual.'
   } else if (freshnessStage === 'tooFresh' && method === 'espresso') {
     note = 'Very fresh — go slightly coarser. CO₂ under pressure overshoots extraction fast.'

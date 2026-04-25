@@ -107,21 +107,32 @@ export const FRESHNESS_BADGE_CLASS: Record<FreshnessStage, string> = {
   aging: 'bg-orange-100 text-orange-800', old: 'bg-red-100 text-red-700',
 }
 
+// Decaf beans have almost no CO₂ retention (decaf process opens cellular structure).
+// They're ready to brew immediately and reach peak 3 days sooner, but also age faster.
+// We model this by advancing the effective age by 3 days before stage lookup.
+const DECAF_AGE_SHIFT = 3
+
 export function getFreshness(
   roastDate: string,
   method: BrewMethod,
   roastLevel: RoastLevel = 'medium',
   process: Process = 'washed',
+  isDecaf = false,
 ): FreshnessResult {
   const age = Math.floor((Date.now() - new Date(roastDate).getTime()) / 86_400_000)
   const windows = WINDOWS[method][roastLevel][process]
-  const stage = STAGE_ORDER.find(s => age >= windows[s][0] && age <= windows[s][1]) ?? 'old'
-  const position = Math.min(1, Math.max(0, age / windows.aging[1]))
+  const effectiveAge = isDecaf ? age + DECAF_AGE_SHIFT : age
+  const stage = STAGE_ORDER.find(s => effectiveAge >= windows[s][0] && effectiveAge <= windows[s][1]) ?? 'old'
+  const position = Math.min(1, Math.max(0, effectiveAge / windows.aging[1]))
 
   let warning: string | undefined
   if (stage === 'tooFresh') {
-    const waitUntil = windows.earlyPeak[0]
-    warning = `Only ${age}d old — CO₂ still degassing. Wait until day ${waitUntil}.`
+    if (isDecaf) {
+      warning = `Roasted ${age}d ago — decaf is ready from day 1, but this is very fresh. Good to brew now.`
+    } else {
+      const waitUntil = windows.earlyPeak[0]
+      warning = `Only ${age}d old — CO₂ still degassing. Wait until day ${waitUntil}.`
+    }
   } else if (stage === 'aging') {
     warning = `${age} days old — flavor fading. Use soon.`
   } else if (stage === 'old') {

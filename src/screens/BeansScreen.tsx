@@ -8,6 +8,7 @@ import {
 } from '../db'
 import { BREW_METHODS, ROAST_LEVELS, PROCESSES, KNOWN_ORIGINS } from '../constants'
 import { Card } from '../components/Card'
+import { DecafBadge } from '../components/DecafBadge'
 import { OriginSelect } from '../components/OriginSelect'
 import { getFreshness, FRESHNESS_BADGE_CLASS, type FreshnessStage } from '../engine/freshness'
 import { computeRemainingGrams, isEffectivelyEmpty, remainingLabel, remainingColor } from '../engine/stock'
@@ -119,6 +120,7 @@ function BeanForm({ initial, knownBeans, withBag = false, onSave, onCancel }: Be
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(initial?.roastLevel ?? 'medium')
   const [process, setProcess] = useState<Process>(initial?.process ?? 'washed')
   const [preferredMethod, setPreferredMethod] = useState<BrewMethod>(initial?.preferredMethod ?? 'espresso')
+  const [isDecaf, setIsDecaf] = useState(initial?.isDecaf ?? false)
   const [roastDate, setRoastDate] = useState('')
   const [purchasedGrams, setPurchasedGrams] = useState('')
   const [depleted, setDepleted] = useState(false)
@@ -159,6 +161,7 @@ function BeanForm({ initial, knownBeans, withBag = false, onSave, onCancel }: Be
       roastLevel,
       process,
       preferredMethod,
+      isDecaf: isDecaf || undefined,
       createdAt: initial?.createdAt ?? new Date().toISOString(),
     }
     const bag = withBag ? {
@@ -233,6 +236,19 @@ function BeanForm({ initial, knownBeans, withBag = false, onSave, onCancel }: Be
           {BREW_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </div>
+
+      <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5">
+        <input
+          type="checkbox"
+          checked={isDecaf}
+          onChange={e => setIsDecaf(e.target.checked)}
+          className="rounded border-gray-300 text-gray-600"
+        />
+        <div>
+          <div className="text-xs font-semibold text-gray-700">Decaf</div>
+          <div className="text-[10px] text-gray-400 leading-snug">Adjusts rest windows, grind and extraction recommendations</div>
+        </div>
+      </label>
 
       {withBag && (
         <>
@@ -484,7 +500,7 @@ function BeanCard({ bean, allBeans, onUpdated, onDeleted }: BeanCardProps) {
   // Summary badges: show freshness of the most recently added active bag
   const activeBags = bags.filter(b => !b.depleted)
   const summaryBag = activeBags.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-  const summaryFreshness = summaryBag?.roastDate ? getFreshness(summaryBag.roastDate, bean.preferredMethod, bean.roastLevel, bean.process) : null
+  const summaryFreshness = summaryBag?.roastDate ? getFreshness(summaryBag.roastDate, bean.preferredMethod, bean.roastLevel, bean.process, bean.isDecaf) : null
 
   if (mode === 'edit') {
     return (
@@ -501,11 +517,15 @@ function BeanCard({ bean, allBeans, onUpdated, onDeleted }: BeanCardProps) {
   }
 
   return (
+    <div className={bean.isDecaf ? 'opacity-70' : undefined}>
     <Card>
       <button type="button" onClick={handleExpand} className="w-full text-left">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold truncate">{bean.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold truncate">{bean.name}</span>
+              {bean.isDecaf && <DecafBadge />}
+            </div>
             {bean.roaster && <div className="text-xs text-gray-500 mt-0.5">{bean.roaster}</div>}
             <div className="flex gap-1.5 flex-wrap mt-2">
               <span className="rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 text-xs font-medium">{roastLabel}</span>
@@ -589,6 +609,7 @@ function BeanCard({ bean, allBeans, onUpdated, onDeleted }: BeanCardProps) {
         )}
       </div>
     </Card>
+    </div>
   )
 }
 

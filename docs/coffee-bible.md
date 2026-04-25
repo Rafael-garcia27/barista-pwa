@@ -266,6 +266,125 @@ The 1.12 factor accounts for ~12% waste (clinging grounds, retained liquid, spil
 
 ---
 
+## Part 6 — Decaf: Behaviour, Taste Profiles & Extraction
+
+### Why Decaf Behaves Differently
+
+Decaffeination fundamentally alters bean structure. All commercial processes — Swiss Water (SWP), supercritical CO₂, ethyl acetate (EA), and methylene chloride (MC) — swell the bean in water or solvent, strip caffeine, then dry it again. The result is a more **porous, fragile cellular structure** with less CO₂ retention.
+
+**Three consequences for brewing:**
+1. **No meaningful degassing** — decaf is ready to brew from roast day 1. The "too fresh" problem that defines regular coffee is essentially absent.
+2. **Faster extraction** — the porous structure dissolves more readily. At the same grind setting as regular coffee, decaf over-extracts. Go **1–3 clicks coarser** on the grinder.
+3. **Earlier aging** — more surface area means faster oxidation. Decaf peaks sooner and fades faster than equivalent regular coffee.
+
+---
+
+### Freshness Windows for Decaf
+
+All stages arrive ~3 days sooner than regular coffee of the same roast and process. Use as guidelines:
+
+| Method | Ready from | Peak | Aging begins |
+|--------|-----------|------|--------------|
+| Espresso | Day 1 | Day 2–9 | Day 10–14 |
+| V60 | Day 1 | Day 1–11 | Day 12–16 |
+| AeroPress | Day 1 | Day 1–10 | Day 11–15 |
+
+---
+
+### Decaffeination Process Quality Ranking
+
+| Process | Flavor Retention | Notes |
+|---------|----------------|-------|
+| Supercritical CO₂ | Highest | Selective caffeine removal; minimal flavor impact; expensive |
+| Swiss Water (SWP) | High | No chemicals; clean cup; strips some delicate aromatics |
+| Ethyl Acetate (EA) | Medium | Natural-derived solvent; slight residual sweetness possible |
+| Methylene Chloride (MC) | Medium | Most common commercially; acceptable for commodity decaf |
+
+When buying specialty decaf, look for SWP or CO₂ labelling.
+
+---
+
+### Roast Level Impact on Decaf
+
+| Roast | Verdict | Rationale |
+|-------|---------|-----------|
+| **Light** | Worst combination | Delicate florals and fruit esters are stripped in decaf processing. Result: flat, papery, muted. |
+| **Medium** | Best balance | Caramel, chocolate, mild fruit — robust enough to survive decaf. Sweetness and body intact. |
+| **Medium-Dark / Dark** | Very reliable | Heavy Maillard compounds (chocolate, dark fruit, nut) survive decaf processing well. Consistent result. |
+
+**Recommendation:** avoid light-roast decaf unless specifically sourcing CO₂-process beans from an origin known for structured body (e.g. Colombia, Brazil).
+
+---
+
+### Origin Profiles in Decaf
+
+#### Ethiopia / East Africa
+- **What's lost**: the high florals (jasmine, bergamot) and bright fruit esters — these are the most volatile and soluble compounds and are stripped earliest in decaf processing
+- **What survives**: body, mild acidity, some chocolate and malt notes
+- **Light roast decaf**: typically tastes papery and muted — not recommended
+- **Medium roast decaf**: preserves caramel and mild citrus, acceptable quality
+- **Brew tip**: AeroPress extracts more body from East African decaf than V60
+
+#### Brazil
+- **Best decaf origin** — chocolate, nut, and body-forward character is driven by heavier Maillard compounds that are robust to all decaf processes
+- Natural and pulped natural process Brazilian decaf retains excellent sweetness
+- Works brilliantly as espresso decaf — low acidity, full body, consistent extraction
+- Ratio: 1.8–2.0× for espresso; natural sweetness fills the cup
+
+#### Colombia
+- Well-structured, medium-bodied — caramel, nut, mild red fruit survives decaf processing
+- One of the most reliable decaf origins for both espresso and filter
+- Slightly stronger dose (+0.5g) helps compensate for reduced aromatic density
+
+#### Indonesia / Sumatra
+- Earthy, syrupy character survives decaf very well — these compounds are heavier and less volatile
+- Good espresso or AeroPress decaf; V60 can taste flat and muddy
+- Low natural acidity means no sharpness risk even at coarser grind
+
+#### Central America (Guatemala, Honduras, Costa Rica)
+- Balanced and versatile — caramel, brown sugar, mild fruit
+- Good all-round decaf for both espresso and filter
+- Consistent performance across decaf processes
+
+#### Yemen
+- Complex wine-like fermentation notes are partially stripped in decaf
+- CO₂-process Yemeni decaf retains the most character; SWP loses more
+- Still interesting as a decaf filter if origin quality is high
+
+---
+
+### Extraction Parameters for Decaf
+
+#### Espresso
+- **Grind**: 1–3 clicks coarser than regular equivalent
+- **Dose**: same or +0.5g to compensate for lower aromatic density
+- **Ratio**: 1.9–2.3× (same as regular medium-dark; decaf doesn't need the longer pull)
+- **Time**: target 22–30s (shorter than regular — porous bean extracts faster)
+- **Temperature**: prefer lower end of range (92–94°C) to avoid over-extraction harshness
+
+#### V60
+- **Grind**: 2–3 clicks coarser than regular
+- **Ratio**: consider 1:14–1:15 (slightly stronger to compensate for fewer aromatic compounds)
+- **Time**: target 2:00–2:45 (faster than regular; stop at signs of over-extraction)
+
+#### AeroPress
+- **Grind**: 2–3 clicks coarser
+- **Steep time**: 60–100s (shorter than regular; decaf extracts fast)
+- **Pressure**: gentle — decaf grounds are softer and compact more than regular
+
+---
+
+### Diagnosis Notes for Decaf
+
+| Symptom | Decaf-specific interpretation |
+|---------|------------------------------|
+| Bitter / harsh | Almost always over-extraction — grind coarser or shorten time before any other adjustment |
+| Flat / muted | Origin character limitation — consider medium-dark roast or Brazilian/Colombian origin |
+| Sour (rare) | Genuinely under-extracted — grind finer in small steps; decaf rarely under-extracts |
+| Watery | Ratio too weak — try 1:14–1:15 for filter, or increase dose by 0.5–1g |
+
+---
+
 ## Sources
 
 | Source | Used For |

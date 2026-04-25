@@ -18,6 +18,7 @@ export interface Bean {
   roastLevel: RoastLevel
   process: Process
   preferredMethod: BrewMethod
+  isDecaf?: boolean
   createdAt: string
 }
 

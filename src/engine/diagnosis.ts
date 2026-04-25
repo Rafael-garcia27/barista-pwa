@@ -157,11 +157,22 @@ export function diagnose(brew: BrewLog, bean: Bean, roastDate?: string): Diagnos
 
   let freshnessWarning: string | undefined
   if (roastDate) {
-    const f = getFreshness(roastDate, brew.params.method, bean.roastLevel, bean.process)
+    const f = getFreshness(roastDate, brew.params.method, bean.roastLevel, bean.process, bean.isDecaf)
     freshnessWarning = f.warning
   }
 
-  const warning = [result.warning, freshnessWarning].filter(Boolean).join(' ') || undefined
+  // Decaf-specific over-extraction nudge: porous bean structure extracts faster
+  let decafWarning: string | undefined
+  if (bean.isDecaf) {
+    const tags = brew.tasteTags as string[]
+    if (tags.includes('bitter') || tags.includes('harsh')) {
+      decafWarning = 'Decaf beans extract faster than regular — bitter/harsh notes often mean grind is too fine or time is too long.'
+    } else if (result.score >= 80) {
+      decafWarning = 'Good decaf extraction — note that decaf tastes improve significantly with medium-to-dark roast origins like Brazil or Colombia.'
+    }
+  }
+
+  const warning = [result.warning, freshnessWarning, decafWarning].filter(Boolean).join(' ') || undefined
 
   return {
     score: result.score,

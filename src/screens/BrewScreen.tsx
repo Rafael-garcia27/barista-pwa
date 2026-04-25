@@ -13,6 +13,7 @@ import { BREW_METHODS, ROAST_LEVELS, PROCESSES, TASTE_TAGS_POSITIVE, TASTE_TAGS_
 import { THRESHOLDS } from '../engine/rules'
 import { clicksToScale } from '../engine/grinder'
 import { Card } from '../components/Card'
+import { DecafBadge } from '../components/DecafBadge'
 import { Dial } from '../components/Dial'
 import { GrinderWheel } from '../components/GrinderWheel'
 import type { TabId } from '../components/TabBar'
@@ -425,7 +426,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
                 const isBestMatch = index === 0 && topScore !== null && topScore >= 70
                 const bestBag = pickBestBag(bags, bean.id)
                 const freshness = bestBag?.roastDate
-                  ? getFreshness(bestBag.roastDate, selectedMethod ?? bean.preferredMethod, bean.roastLevel, bean.process)
+                  ? getFreshness(bestBag.roastDate, selectedMethod ?? bean.preferredMethod, bean.roastLevel, bean.process, bean.isDecaf)
                   : null
 
                 return (
@@ -445,6 +446,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <div className="text-sm font-medium truncate">{bean.name}</div>
+                          {bean.isDecaf && <DecafBadge />}
                           {!isBestMatch && score !== null && score < 50 && (
                             <span className="rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-xs font-medium flex-shrink-0">
                               Not ideal

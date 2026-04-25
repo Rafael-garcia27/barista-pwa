@@ -22,6 +22,28 @@ function originNote(origins: string[], method: BrewMethod): string | undefined {
   return undefined
 }
 
+function decafOriginNote(origins: string[], roastLevel: string): string | undefined {
+  const has = (kws: string[]) => origins.some(o => kws.some(k => o.toLowerCase().includes(k)))
+  const notes: string[] = []
+
+  if (has(['ethiopia','kenya','rwanda','burundi','uganda','tanzania'])) {
+    notes.push(roastLevel === 'light'
+      ? 'East African light-roast decaf loses most floral/fruit character in decaf processing — medium roast preserves more.'
+      : 'East African decaf retains some brightness but high florals are reduced. Expect chocolate and mild citrus.')
+  }
+  if (has(['brazil'])) {
+    notes.push('Brazilian decaf is among the best — chocolate and body survive decaf processing very well.')
+  }
+  if (has(['indonesia','sumatra','java','sulawesi','flores','papua'])) {
+    notes.push('Indonesian decaf retains earthy body well, but V60 can taste flat — espresso or AeroPress recommended.')
+  }
+  if (roastLevel === 'light' && notes.length === 0) {
+    notes.push('Light roast decaf loses the most complexity in processing. Consider medium roast for better flavor retention.')
+  }
+
+  return notes.length > 0 ? notes[0] : undefined
+}
+
 function brewDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
@@ -38,13 +60,15 @@ export function getStartingPoint(
   previousBrews?: BrewLog[],
 ): StartingPoint {
   const origins = bean.origins ?? []
+  const isDecaf = bean.isDecaf ?? false
   const freshnessResult = roastDate
-    ? getFreshness(roastDate, method, bean.roastLevel, bean.process)
+    ? getFreshness(roastDate, method, bean.roastLevel, bean.process, isDecaf)
     : undefined
   const freshnessWarn = freshnessResult?.warning
   const oNote = originNote(origins, method)
-  const warning = [freshnessWarn, oNote].filter(Boolean).join(' ') || undefined
-  const grinderRec = getGrinderRecommendation(method, bean.roastLevel, freshnessResult?.stage)
+  const decafNote = isDecaf ? decafOriginNote(origins, bean.roastLevel) : undefined
+  const warning = [freshnessWarn, oNote, decafNote].filter(Boolean).join(' ') || undefined
+  const grinderRec = getGrinderRecommendation(method, bean.roastLevel, freshnessResult?.stage, isDecaf)
 
   // ── Personal history ────────────────────────────────────────────────────────
   // All brews of this bean × method, regardless of rating
