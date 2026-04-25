@@ -420,7 +420,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
               {sortedBeans.map((bean, index) => {
                 const score = selectedMethod ? getBeanSuitability(bean, selectedMethod) : null
                 const isBestMatch = index === 0 && topScore !== null && topScore >= 70

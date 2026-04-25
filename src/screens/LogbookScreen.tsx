@@ -15,14 +15,6 @@ function formatParams(brew: BrewLog): string {
   return `${doseIn}g coffee · ${waterGrams}g water · ${timeSeconds}s`
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 export function LogbookScreen({ isActive }: { isActive?: boolean }) {
   const [beans, setBeans] = useState<Bean[]>([])
@@ -118,10 +110,6 @@ export function LogbookScreen({ isActive }: { isActive?: boolean }) {
                       </span>
                     )}
                   </div>
-                  {bean?.roaster && (
-                    <div className="text-xs text-gray-400 mt-0.5">{bean.roaster}</div>
-                  )}
-                  <div className="mt-1 text-xs text-gray-500">{formatDate(brew.createdAt)}</div>
                   <div className="mt-1 text-xs text-gray-600">{formatParams(brew)}</div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <span className="text-xs text-gray-600">

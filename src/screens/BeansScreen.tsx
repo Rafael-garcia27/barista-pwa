@@ -789,21 +789,23 @@ export function BeansScreen({ isActive }: { isActive?: boolean }) {
           )}
 
           {/* ── On Deck ── */}
-          <div className="space-y-3">
-            {active.length === 0 && !showForm && (
-              <Card>
-                <div className="text-sm text-gray-500 text-center py-4">
-                  No beans on deck. Add your first bag to get started.
-                </div>
-              </Card>
-            )}
-            {active.map(bean => (
-              <BeanCard key={bean.id} bean={bean} allBeans={beans} onUpdated={refresh} onDeleted={refresh} />
-            ))}
-          </div>
+          {!showForm && (
+            <div className="space-y-3">
+              {active.length === 0 && (
+                <Card>
+                  <div className="text-sm text-gray-500 text-center py-4">
+                    No beans on deck. Add your first bag to get started.
+                  </div>
+                </Card>
+              )}
+              {active.map(bean => (
+                <BeanCard key={bean.id} bean={bean} allBeans={beans} onUpdated={refresh} onDeleted={refresh} />
+              ))}
+            </div>
+          )}
 
           {/* ── The Vault ── */}
-          {vault.length > 0 && (
+          {!showForm && vault.length > 0 && (
             <div className="pt-2">
               <button type="button" onClick={() => setVaultOpen(prev => !prev)}
                 className="flex items-center gap-2 w-full text-left px-1 py-2">
