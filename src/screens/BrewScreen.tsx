@@ -1,30 +1,244 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useReducer } from 'react'
 import { ArrowUp, ArrowDown, ArrowLeftRight, Star } from 'lucide-react'
 import { EspressoIcon, V60Icon, AeroPressIcon } from '../components/MethodIcon'
 import { BrewAnimation } from '../components/BrewAnimation'
 import type { Bag, Bean, BrewLog, BrewMethod, BrewParams, Diagnosis, PuckState, FlowState, TasteTag, StartingPoint } from '../types'
-import { listBeans, listBags, addBrew, upsertBag, getBrewsByBagId } from '../db'
+import { listBeans, listBags, addBrew, updateBrew, upsertBag, getBrewsByBagId, getBrewsByBeanId } from '../db'
 import { computeRemainingGrams, isEffectivelyEmpty } from '../engine/stock'
 import { getStartingPoint } from '../engine/recommendation'
 import { diagnose } from '../engine/diagnosis'
 import { getFreshness, FRESHNESS_BADGE_CLASS } from '../engine/freshness'
 import { getBeanSuitability, sortBeansByMethod } from '../engine/suitability'
-import { BREW_METHODS, ROAST_LEVELS, PROCESSES, TASTE_TAGS, PUCK_STATES, FLOW_STATES } from '../constants'
+import { BREW_METHODS, ROAST_LEVELS, PROCESSES, TASTE_TAGS_POSITIVE, TASTE_TAGS_NEGATIVE, PUCK_STATES, FLOW_STATES } from '../constants'
+import { THRESHOLDS } from '../engine/rules'
 import { clicksToScale } from '../engine/grinder'
 import { Card } from '../components/Card'
 import { Dial } from '../components/Dial'
+import { GrinderWheel } from '../components/GrinderWheel'
 import type { TabId } from '../components/TabBar'
 
-type BrewStep = 'setup' | 'params' | 'brew' | 'evaluate' | 'result'
+// ─── STATE MACHINE ─────────────────────────────────────────────────────────────
 
-export interface BrewScreenHandle {
-  handleTabReselect: () => void
+type BrewState =
+  | {
+      step: 'setup'
+      beans: Bean[]
+      bags: Bag[]
+      selectedBean?: Bean
+      selectedMethod?: BrewMethod
+      selectedBag?: Bag
+      isLoadingHistory: boolean
+    }
+  | {
+      step: 'params'
+      beans: Bean[]
+      bags: Bag[]
+      bean: Bean
+      bag?: Bag
+      method: BrewMethod
+      params: BrewParams
+      startingPoint: StartingPoint
+      grinderClicks?: number
+    }
+  | {
+      step: 'brew'
+      beans: Bean[]
+      bags: Bag[]
+      bean: Bean
+      bag?: Bag
+      method: BrewMethod
+      params: BrewParams
+      startingPoint: StartingPoint
+      grinderClicks?: number
+      timerSeconds: number
+      isRunning: boolean
+    }
+  | {
+      step: 'evaluate'
+      beans: Bean[]
+      bags: Bag[]
+      bean: Bean
+      bag?: Bag
+      method: BrewMethod
+      params: BrewParams
+      startingPoint: StartingPoint
+      grinderClicks?: number
+      rating: 1 | 2 | 3 | 4 | 5
+      tasteTags: TasteTag[]
+      notes: string
+      puckState: PuckState | null
+      flowState: FlowState | null
+    }
+  | {
+      step: 'result'
+      beans: Bean[]
+      bags: Bag[]
+      bean: Bean
+      bag: Bag
+      savedBrew: BrewLog
+      diagnosis: Diagnosis
+      stockPrompt: boolean
+    }
+
+type BrewAction =
+  | { type: 'CATALOG_LOADED'; beans: Bean[]; bags: Bag[] }
+  | { type: 'SELECT_BEAN'; bean: Bean }
+  | { type: 'SELECT_METHOD'; method: BrewMethod }
+  | { type: 'LOADING_HISTORY' }
+  | { type: 'CONFIRM_SETUP'; bag?: Bag; startingPoint: StartingPoint }
+  | { type: 'SET_PARAMS'; params: BrewParams }
+  | { type: 'SET_GRINDER'; clicks: number }
+  | { type: 'START_BREW' }
+  | { type: 'TICK' }
+  | { type: 'TOGGLE_RUNNING' }
+  | { type: 'FINISH_BREW' }
+  | { type: 'SET_RATING'; rating: 1 | 2 | 3 | 4 | 5 }
+  | { type: 'TOGGLE_TAG'; tag: TasteTag }
+  | { type: 'SET_NOTES'; notes: string }
+  | { type: 'SET_PUCK_STATE'; puckState: PuckState | null }
+  | { type: 'SET_FLOW_STATE'; flowState: FlowState | null }
+  | { type: 'SAVE_RESULT'; brew: BrewLog; diagnosis: Diagnosis; bag: Bag }
+  | { type: 'SET_STOCK_PROMPT'; value: boolean }
+  | { type: 'MARK_DEPLETED'; bag: Bag }
+  | { type: 'RESET' }
+
+const INITIAL_STATE: BrewState = {
+  step: 'setup',
+  beans: [],
+  bags: [],
+  isLoadingHistory: false,
 }
 
-interface BrewScreenProps {
-  onNavigateToTab: (tab: TabId) => void
-  onBrewStatusChange?: (active: boolean) => void
+function brewReducer(state: BrewState, action: BrewAction): BrewState {
+  const catalog = { beans: state.beans, bags: state.bags }
+
+  switch (action.type) {
+    case 'CATALOG_LOADED':
+      return { ...state, beans: action.beans, bags: action.bags }
+
+    case 'SELECT_BEAN': {
+      if (state.step !== 'setup') return state
+      const bag = state.selectedMethod ? pickBestBag(state.bags, action.bean.id) ?? undefined : undefined
+      return { ...state, selectedBean: action.bean, selectedBag: bag }
+    }
+
+    case 'SELECT_METHOD': {
+      if (state.step !== 'setup') return state
+      const bag = state.selectedBean ? pickBestBag(state.bags, state.selectedBean.id) ?? undefined : undefined
+      return { ...state, selectedMethod: action.method, selectedBag: bag }
+    }
+
+    case 'LOADING_HISTORY':
+      if (state.step !== 'setup') return state
+      return { ...state, isLoadingHistory: true }
+
+    case 'CONFIRM_SETUP': {
+      if (state.step !== 'setup' || !state.selectedBean || !state.selectedMethod) return state
+      const sp = action.startingPoint
+      return {
+        ...catalog,
+        step: 'params',
+        bean: state.selectedBean,
+        bag: action.bag,
+        method: state.selectedMethod,
+        params: sp.params,
+        startingPoint: sp,
+        grinderClicks: sp.params.grinderClicks ?? sp.grinderRec?.clicksCenter,
+      }
+    }
+
+    case 'SET_PARAMS': {
+      if (state.step !== 'params' && state.step !== 'brew') return state
+      return { ...state, params: action.params }
+    }
+
+    case 'SET_GRINDER': {
+      if (state.step !== 'params' && state.step !== 'brew') return state
+      return { ...state, grinderClicks: action.clicks }
+    }
+
+    case 'START_BREW': {
+      if (state.step !== 'params') return state
+      return { ...state, step: 'brew', timerSeconds: 0, isRunning: true }
+    }
+
+    case 'TICK':
+      if (state.step !== 'brew') return state
+      return { ...state, timerSeconds: state.timerSeconds + 1 }
+
+    case 'TOGGLE_RUNNING':
+      if (state.step !== 'brew') return state
+      return { ...state, isRunning: !state.isRunning }
+
+    case 'FINISH_BREW': {
+      if (state.step !== 'brew') return state
+      const { isRunning: _r, timerSeconds: _t, ...rest } = state
+      return {
+        ...rest,
+        step: 'evaluate',
+        params: { ...state.params, timeSeconds: state.timerSeconds },
+        rating: 3,
+        tasteTags: [],
+        notes: '',
+        puckState: null,
+        flowState: null,
+      }
+    }
+
+    case 'SET_RATING':
+      if (state.step !== 'evaluate') return state
+      return { ...state, rating: action.rating }
+
+    case 'TOGGLE_TAG': {
+      if (state.step !== 'evaluate') return state
+      const tags = state.tasteTags.includes(action.tag)
+        ? state.tasteTags.filter(t => t !== action.tag)
+        : [...state.tasteTags, action.tag]
+      return { ...state, tasteTags: tags }
+    }
+
+    case 'SET_NOTES':
+      if (state.step !== 'evaluate') return state
+      return { ...state, notes: action.notes }
+
+    case 'SET_PUCK_STATE':
+      if (state.step !== 'evaluate') return state
+      return { ...state, puckState: action.puckState }
+
+    case 'SET_FLOW_STATE':
+      if (state.step !== 'evaluate') return state
+      return { ...state, flowState: action.flowState }
+
+    case 'SAVE_RESULT': {
+      if (state.step !== 'evaluate') return state
+      return {
+        ...catalog,
+        step: 'result',
+        bean: state.bean,
+        bag: action.bag,
+        savedBrew: action.brew,
+        diagnosis: action.diagnosis,
+        stockPrompt: false,
+      }
+    }
+
+    case 'SET_STOCK_PROMPT':
+      if (state.step !== 'result') return state
+      return { ...state, stockPrompt: action.value }
+
+    case 'MARK_DEPLETED':
+      if (state.step !== 'result') return state
+      return { ...state, bag: action.bag, stockPrompt: false }
+
+    case 'RESET':
+      return { ...catalog, step: 'setup', isLoadingHistory: false }
+
+    default:
+      return state
+  }
 }
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function formatTimer(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -43,182 +257,119 @@ function pickBestBag(bags: Bag[], beanId: string): Bag | null {
   })[0]
 }
 
+// ─── COMPONENT ────────────────────────────────────────────────────────────────
+
+export interface BrewScreenHandle {
+  handleTabReselect: () => void
+}
+
+interface BrewScreenProps {
+  onNavigateToTab: (tab: TabId) => void
+  onBrewStatusChange?: (active: boolean) => void
+}
+
 export const BrewScreen = forwardRef<BrewScreenHandle, BrewScreenProps>(
 function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
-  const [step, setStep] = useState<BrewStep>('setup')
-  const [beans, setBeans] = useState<Bean[]>([])
-  const [bags, setBags] = useState<Bag[]>([])
-  const [selectedBean, setSelectedBean] = useState<Bean | null>(null)
-  const [selectedBag, setSelectedBag] = useState<Bag | null>(null)
-  const [selectedMethod, setSelectedMethod] = useState<BrewMethod | null>(null)
-  const [params, setParams] = useState<BrewParams | null>(null)
-  const [startingPoint, setStartingPoint] = useState<StartingPoint | null>(null)
-  const [grinderClicks, setGrinderClicks] = useState<number | null>(null)
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  const [timerSeconds, setTimerSeconds] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5>(3)
-  const [tasteTags, setTasteTags] = useState<TasteTag[]>([])
-  const [notes, setNotes] = useState('')
-  const [puckState, setPuckState] = useState<PuckState | null>(null)
-  const [flowState, setFlowState] = useState<FlowState | null>(null)
-  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
-  const [savedBrew, setSavedBrew] = useState<BrewLog | null>(null)
-  const [stockPrompt, setStockPrompt] = useState(false)
-
-  const isRunningRef = useRef(isRunning)
-  isRunningRef.current = isRunning
+  const [state, dispatch] = useReducer(brewReducer, INITIAL_STATE)
 
   // Expose tab-reselect handler to parent: go to setup unless actively brewing
   useImperativeHandle(ref, () => ({
     handleTabReselect() {
-      if (step !== 'brew') resetAll()
+      if (state.step !== 'brew') dispatch({ type: 'RESET' })
     },
-  }), [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [state.step])
 
   // Tell parent whether a brew is in progress so the nav badge shows
   useEffect(() => {
-    onBrewStatusChange?.(step === 'brew')
-  }, [step, onBrewStatusChange])
+    onBrewStatusChange?.(state.step === 'brew')
+  }, [state.step, onBrewStatusChange])
 
+  // Load catalog on mount
   useEffect(() => {
-    Promise.all([listBeans(), listBags()]).then(([b, bags]) => {
-      setBeans(b)
-      setBags(bags)
+    Promise.all([listBeans(), listBags()]).then(([beans, bags]) => {
+      dispatch({ type: 'CATALOG_LOADED', beans, bags })
     })
   }, [])
 
+  // Timer tick
   useEffect(() => {
-    if (!isRunning) return
-    const interval = setInterval(() => setTimerSeconds(s => s + 1), 1000)
+    if (state.step !== 'brew' || !state.isRunning) return
+    const interval = setInterval(() => dispatch({ type: 'TICK' }), 1000)
     return () => clearInterval(interval)
-  }, [isRunning])
+  }, [state.step, state.step === 'brew' && state.isRunning]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function resetAll() {
-    setStep('setup')
-    setSelectedBean(null)
-    setSelectedBag(null)
-    setSelectedMethod(null)
-    setParams(null)
-    setStartingPoint(null)
-    setGrinderClicks(null)
-    setIsLoadingHistory(false)
-    setTimerSeconds(0)
-    setIsRunning(false)
-    setRating(3)
-    setTasteTags([])
-    setNotes('')
-    setPuckState(null)
-    setFlowState(null)
-    setDiagnosis(null)
-    setSavedBrew(null)
-    setStockPrompt(false)
-    Promise.all([listBeans(), listBags()]).then(([b, bags]) => {
-      setBeans(b)
-      setBags(bags)
-    })
-  }
-
-  function handleBeanSelect(bean: Bean) {
-    setSelectedBean(bean)
-    setSelectedBag(selectedMethod ? pickBestBag(bags, bean.id) : null)
-  }
-
-  function handleMethodSelect(method: BrewMethod) {
-    setSelectedMethod(method)
-    if (selectedBean) setSelectedBag(pickBestBag(bags, selectedBean.id))
-  }
+  // ─── ASYNC HANDLERS ─────────────────────────────────────────────────────────
 
   async function handleSetupConfirm() {
-    if (!selectedBean || !selectedMethod || isLoadingHistory) return
-    setIsLoadingHistory(true)
-    const bag = selectedBag ?? pickBestBag(bags, selectedBean.id)
-    setSelectedBag(bag)
-
-    // Fetch all brews for this bean's bags to build a personalized recommendation
-    const beanBagIds = bags.filter(b => b.beanId === selectedBean.id).map(b => b.id)
-    const brewArrays = await Promise.all(beanBagIds.map(id => getBrewsByBagId(id)))
-    const previousBrews = brewArrays.flat()
-
+    if (state.step !== 'setup' || !state.selectedBean || !state.selectedMethod) return
+    dispatch({ type: 'LOADING_HISTORY' })
+    const { selectedBean, selectedMethod, selectedBag, bags } = state
+    const bag = selectedBag ?? pickBestBag(bags, selectedBean.id) ?? undefined
+    const previousBrews = await getBrewsByBeanId(selectedBean.id)
     const sp = getStartingPoint(selectedBean, selectedMethod, bag?.roastDate, previousBrews)
-    setParams(sp.params)
-    setStartingPoint(sp)
-    // Prefer the personal brew's actual grinder setting; fall back to freshness-adjusted rec center
-    setGrinderClicks(sp.params.grinderClicks ?? sp.grinderRec?.clicksCenter ?? null)
-    setIsLoadingHistory(false)
-    setStep('params')
-  }
-
-  function handleStartBrew() {
-    setTimerSeconds(0)
-    setIsRunning(true)
-    setStep('brew')
-  }
-
-  function handleDone() {
-    setIsRunning(false)
-    setParams(prev => {
-      if (!prev) return prev
-      return { ...prev, timeSeconds: timerSeconds }
-    })
-    setStep('evaluate')
+    dispatch({ type: 'CONFIRM_SETUP', bag, startingPoint: sp })
   }
 
   async function handleSaveAndAnalyze() {
-    if (!selectedBean || !params || !selectedBag) return
+    if (state.step !== 'evaluate' || !state.bag) return
+    const { bean, bag, params, grinderClicks, rating, tasteTags, notes, puckState, flowState, bags } = state
 
-    const gc = grinderClicks ?? undefined
     let finalParams: BrewParams
     if (params.method === 'espresso') {
-      finalParams = { ...params, puckState, flowState, grinderClicks: gc }
+      finalParams = { ...params, puckState, flowState, grinderClicks }
     } else {
-      finalParams = { ...params, grinderClicks: gc }
+      finalParams = { ...params, grinderClicks }
     }
 
     const brew: BrewLog = {
       id: crypto.randomUUID(),
-      bagId: selectedBag.id,
+      bagId: bag.id,
+      beanId: bean.id,
       params: finalParams,
       rating,
       tasteTags,
       notes: notes.trim() || undefined,
-      isBest: rating >= 4,
+      isBest: false,
       createdAt: new Date().toISOString(),
     }
 
     await addBrew(brew)
 
-    // If remaining was manually set, decrement it so future reads stay accurate
-    let updatedBag = selectedBag
-    if (selectedBag.remainingGrams !== undefined) {
-      const newRemaining = Math.max(0, selectedBag.remainingGrams - finalParams.doseIn * 1.12)
-      updatedBag = { ...selectedBag, remainingGrams: newRemaining }
+    // Recalculate isBest across all brews for this bean × method
+    const beanBagIds = new Set(bags.filter(b => b.beanId === bean.id).map(b => b.id))
+    const allBeanBrews = (await Promise.all([...beanBagIds].map(id => getBrewsByBagId(id)))).flat()
+    const methodBrews = allBeanBrews.filter(b => b.params.method === finalParams.method)
+    const best = methodBrews.sort((a, b) =>
+      b.rating !== a.rating ? b.rating - a.rating : b.createdAt.localeCompare(a.createdAt)
+    )[0]
+    const updates = methodBrews
+      .filter(b => b.isBest !== (b.id === best?.id))
+      .map(b => updateBrew({ ...b, isBest: b.id === best?.id }))
+    await Promise.all(updates)
+    brew.isBest = best?.id === brew.id
+
+    // Decrement remaining if manually tracked
+    let updatedBag = bag
+    if (bag.remainingGrams !== undefined) {
+      const newRemaining = Math.max(0, bag.remainingGrams - finalParams.doseIn * 1.12)
+      updatedBag = { ...bag, remainingGrams: newRemaining }
       await upsertBag(updatedBag)
-      setSelectedBag(updatedBag)
     }
 
-    const result = diagnose(brew, selectedBean, selectedBag.roastDate)
-    setSavedBrew(brew)
-    setDiagnosis(result)
+    const result = diagnose(brew, bean, bag.roastDate)
+    dispatch({ type: 'SAVE_RESULT', brew, diagnosis: result, bag: updatedBag })
 
+    // Check stock after transitioning to result step
     if ((updatedBag.purchasedGrams || updatedBag.remainingGrams !== undefined) && !updatedBag.depleted) {
       const bagBrews = await getBrewsByBagId(updatedBag.id)
       const remaining = computeRemainingGrams(updatedBag, bagBrews)
-      if (isEffectivelyEmpty(remaining)) setStockPrompt(true)
+      if (isEffectivelyEmpty(remaining)) dispatch({ type: 'SET_STOCK_PROMPT', value: true })
     }
-
-    setStep('result')
   }
 
-  function toggleTag(tag: TasteTag) {
-    setTasteTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    )
-  }
-
-  // ─── STEP: SETUP ───────────────────────────────────────────────────────────
-  if (step === 'setup') {
-    // Active beans = have at least one non-depleted bag
+  // ─── STEP: SETUP ─────────────────────────────────────────────────────────────
+  if (state.step === 'setup') {
+    const { beans, bags, selectedBean, selectedMethod, isLoadingHistory } = state
     const activeBeans = beans.filter(bean => bags.some(b => b.beanId === bean.id && !b.depleted))
     const sortedBeans = selectedMethod ? sortBeansByMethod(activeBeans, selectedMethod) : activeBeans
     const topScore = selectedMethod && sortedBeans.length > 0
@@ -238,13 +389,13 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
         </div>
 
         <Card>
-          <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Method</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Method</div>
           <div className="flex gap-2">
             {BREW_METHODS.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => handleMethodSelect(id)}
+                onClick={() => dispatch({ type: 'SELECT_METHOD', method: id })}
                 className={`flex-1 flex flex-col items-center gap-1.5 rounded-xl border py-3 text-xs font-medium transition-colors ${
                   selectedMethod === id
                     ? 'border-amber-400 bg-amber-50 text-amber-700'
@@ -259,7 +410,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
         </Card>
 
         <Card>
-          <div className="text-sm font-semibold mb-3">Select Bean</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Select Bean</div>
           {activeBeans.length === 0 ? (
             <div className="text-sm text-gray-500">
               No active beans.{' '}
@@ -281,7 +432,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
                   <button
                     key={bean.id}
                     type="button"
-                    onClick={() => handleBeanSelect(bean)}
+                    onClick={() => dispatch({ type: 'SELECT_BEAN', bean })}
                     className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
                       selectedBean?.id === bean.id
                         ? 'border-amber-500 bg-amber-100'
@@ -340,49 +491,58 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
     )
   }
 
-  // ─── STEP: PARAMS ──────────────────────────────────────────────────────────
-  if (step === 'params' && params) {
+  // ─── STEP: PARAMS ─────────────────────────────────────────────────────────────
+  if (state.step === 'params') {
+    const { method, params, startingPoint, grinderClicks } = state
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={() => setStep('setup')} className="text-gray-400 text-sm">← Back</button>
-          {selectedMethod && (
+        <div className="flex items-center justify-between h-10">
+          <h1 className="text-xl font-bold text-gray-900">Parameters</h1>
+          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
-              {selectedMethod === 'espresso' && <EspressoIcon size={14} />}
-              {selectedMethod === 'v60' && <V60Icon size={14} />}
-              {selectedMethod === 'aeropress' && <AeroPressIcon size={14} />}
-              {BREW_METHODS.find(m => m.id === selectedMethod)?.label}
+              {method === 'espresso' && <EspressoIcon size={14} />}
+              {method === 'v60' && <V60Icon size={14} />}
+              {method === 'aeropress' && <AeroPressIcon size={14} />}
+              {BREW_METHODS.find(m => m.id === method)?.label}
             </div>
-          )}
+            <button type="button" onClick={() => dispatch({ type: 'RESET' })} className="text-gray-400 text-sm">← Back</button>
+          </div>
         </div>
 
         {/* Barista Tip card */}
         <div className="rounded-2xl bg-stone-900 px-5 py-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
-              {startingPoint?.source === 'personal'
+              {startingPoint.source === 'personal'
                 ? <Star size={15} className="fill-amber-400 text-amber-400 flex-shrink-0" />
                 : <span className="text-lg leading-none">☕</span>
               }
               <span className="text-[10px] font-bold tracking-widest text-amber-400 uppercase">
-                {startingPoint?.source === 'personal' ? 'Your Best Brew' : 'Pro Tip from the Barista'}
+                {startingPoint.source === 'personal' ? 'Your Best Brew' : 'Pro Tip from the Barista'}
               </span>
             </div>
-            {startingPoint?.source === 'personal' && (
+            {startingPoint.source === 'personal' && (
               <span className="flex-shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                 Personalized
               </span>
             )}
           </div>
-          <p className="text-sm text-stone-200 leading-relaxed">{startingPoint?.rationale}</p>
-          {startingPoint?.warning && (
+          <p className="text-sm text-stone-200 leading-relaxed">{startingPoint.rationale}</p>
+          {startingPoint.warning && (
             <div className="rounded-xl bg-amber-500/15 border border-amber-500/25 px-3 py-2.5 text-sm text-amber-300 leading-relaxed">
               {startingPoint.warning}
             </div>
           )}
-          {startingPoint?.source === 'default' && (startingPoint.brewCountForMethod ?? 0) > 0 && (
+          {startingPoint.source === 'personal' && (startingPoint.personalBrewRating ?? 0) <= 3 && (
             <p className="text-[11px] text-stone-500 leading-snug">
-              {startingPoint.brewCountForMethod} brew{startingPoint.brewCountForMethod === 1 ? '' : 's'} logged with this method — rate ≥4★ to personalize next time.
+              Best attempt so far — keep dialing in and rate higher to lock in a better starting point.
+            </p>
+          )}
+          {startingPoint.source === 'default' && (
+            <p className="text-[11px] text-stone-500 leading-snug">
+              {(startingPoint.brewCountForMethod ?? 0) > 0
+                ? `${startingPoint.brewCountForMethod} brew${startingPoint.brewCountForMethod === 1 ? '' : 's'} logged — starting point will personalize after your next brew.`
+                : 'First brew with this method — starting point based on bean profile.'}
             </p>
           )}
         </div>
@@ -395,65 +555,43 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           {params.method === 'espresso' && (
             <div className="grid grid-cols-3 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose In (g)"
-                onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseIn: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseIn: v } })} />
               <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose Out (g)"
-                onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseOut: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseOut: v } })} />
               <Dial value={params.timeSeconds} min={10} max={60} step={1} label="Time (s)"
-                onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, timeSeconds: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, timeSeconds: v } })} />
             </div>
           )}
           {(params.method === 'v60' || params.method === 'aeropress') && (
             <div className="grid grid-cols-3 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={10} max={25} step={0.5} label="Coffee (g)"
-                onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, doseIn: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseIn: v } })} />
               <Dial value={params.waterGrams} min={100} max={400} step={5} label="Water (g)"
-                onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, waterGrams: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, waterGrams: v } })} />
               <Dial value={params.timeSeconds} min={30} max={300} step={5} label="Time (s)"
-                onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, timeSeconds: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, timeSeconds: v } })} />
             </div>
           )}
         </Card>
 
         {/* Grinder setting */}
         <Card>
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Grinder</div>
-            {startingPoint?.grinderRec && (
-              <div className="text-[10px] text-gray-400">
-                Rec: <span className="text-amber-600 font-semibold">{startingPoint.grinderRec.scaleRange}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-28 flex-shrink-0">
-              <Dial
-                value={grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25)}
-                min={0}
-                max={100}
-                step={1}
-                label="Scale (0–9)"
-                format={v => (v / 10).toFixed(1)}
-                onChange={setGrinderClicks}
-              />
+          <GrinderWheel
+            value={grinderClicks ?? (startingPoint.grinderRec?.clicksCenter ?? 25)}
+            min={0}
+            max={100}
+            recMin={startingPoint.grinderRec?.clicksMin}
+            recMax={startingPoint.grinderRec?.clicksMax}
+            onChange={clicks => dispatch({ type: 'SET_GRINDER', clicks })}
+          />
+          {startingPoint.grinderRec?.note && (
+            <div className="text-xs text-amber-700 leading-snug mt-2 px-1">
+              {startingPoint.grinderRec.note}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xl font-bold text-gray-800 tabular-nums">
-                {grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25)}
-                <span className="text-sm font-normal text-gray-400 ml-1">clicks</span>
-              </div>
-              <div className="text-xs text-gray-400 mt-0.5">
-                Scale {clicksToScale(grinderClicks ?? (startingPoint?.grinderRec?.clicksCenter ?? 25))}
-              </div>
-              {startingPoint?.grinderRec?.note && (
-                <div className="text-xs text-amber-700 leading-snug mt-1.5">
-                  {startingPoint.grinderRec.note}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </Card>
 
-        <button type="button" onClick={handleStartBrew}
+        <button type="button" onClick={() => dispatch({ type: 'START_BREW' })}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
           Start Brew →
         </button>
@@ -461,11 +599,14 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
     )
   }
 
-  // ─── STEP: BREW ────────────────────────────────────────────────────────────
-  if (step === 'brew' && params) {
+  // ─── STEP: BREW ───────────────────────────────────────────────────────────────
+  if (state.step === 'brew') {
+    const { params, timerSeconds, isRunning } = state
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold text-gray-900">Brewing…</h1>
+        <div className="flex items-center h-10">
+          <h1 className="text-xl font-bold text-gray-900">Brewing…</h1>
+        </div>
 
         {/* Timer + animation — dark warm card */}
         <div className="rounded-2xl bg-stone-900 pt-5 pb-6 flex flex-col items-center gap-4">
@@ -477,7 +618,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           </div>
           <button
             type="button"
-            onClick={() => setIsRunning(prev => !prev)}
+            onClick={() => dispatch({ type: 'TOGGLE_RUNNING' })}
             className={`rounded-2xl px-8 py-2.5 text-sm font-semibold transition-colors ${
               isRunning ? 'bg-stone-700 text-stone-300' : 'bg-amber-500 text-white'
             }`}
@@ -494,22 +635,22 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           {params.method === 'espresso' && (
             <div className="grid grid-cols-2 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={12} max={25} step={0.5} label="Dose In (g)"
-                onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseIn: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseIn: v } })} />
               <Dial value={params.doseOut} min={10} max={60} step={0.5} label="Dose Out (g)"
-                onChange={v => setParams(prev => prev?.method === 'espresso' ? { ...prev, doseOut: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseOut: v } })} />
             </div>
           )}
           {(params.method === 'v60' || params.method === 'aeropress') && (
             <div className="grid grid-cols-2 divide-x divide-gray-100">
               <Dial value={params.doseIn} min={10} max={25} step={0.5} label="Coffee (g)"
-                onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, doseIn: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, doseIn: v } })} />
               <Dial value={params.waterGrams} min={100} max={400} step={5} label="Water (g)"
-                onChange={v => setParams(prev => (prev?.method === 'v60' || prev?.method === 'aeropress') ? { ...prev, waterGrams: v } : prev)} />
+                onChange={v => dispatch({ type: 'SET_PARAMS', params: { ...params, waterGrams: v } })} />
             </div>
           )}
         </Card>
 
-        <button type="button" onClick={handleDone}
+        <button type="button" onClick={() => dispatch({ type: 'FINISH_BREW' })}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
           Done
         </button>
@@ -517,29 +658,35 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
     )
   }
 
-  // ─── STEP: EVALUATE ────────────────────────────────────────────────────────
-  if (step === 'evaluate' && params) {
+  // ─── STEP: EVALUATE ───────────────────────────────────────────────────────────
+  if (state.step === 'evaluate') {
+    const { params, rating, tasteTags, notes, puckState, flowState } = state
+
     type FeedbackSeverity = 'good' | 'warn' | 'bad'
     const brewFeedback: Array<{ label: string; severity: FeedbackSeverity }> = []
 
     if (params.method === 'espresso') {
       const ratio = params.doseOut / params.doseIn
-      if (ratio < 1.5) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — too short`, severity: 'bad' })
+      const { ratioMin, ratioMax, timeMin: espTMin, timeMax: espTMax } = THRESHOLDS.espresso
+      if (ratio < ratioMin) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — too short`, severity: 'bad' })
       else if (ratio <= 2.5) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — perfect`, severity: 'good' })
+      else if (ratio <= ratioMax) brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — long`, severity: 'warn' })
       else brewFeedback.push({ label: `Ratio ${ratio.toFixed(1)}x — too long`, severity: 'warn' })
 
       const t = params.timeSeconds
-      if (t < 22) brewFeedback.push({ label: `${t}s — too fast`, severity: 'bad' })
+      if (t < espTMin) brewFeedback.push({ label: `${t}s — too fast`, severity: 'bad' })
       else if (t <= 35) brewFeedback.push({ label: `${t}s — good time`, severity: 'good' })
+      else if (t <= espTMax) brewFeedback.push({ label: `${t}s — a bit slow`, severity: 'warn' })
       else brewFeedback.push({ label: `${t}s — too slow`, severity: 'warn' })
     } else {
+      const { ratioMin, ratioMax } = THRESHOLDS[params.method]
       const ratio = params.waterGrams / params.doseIn
-      if (ratio < 13) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — very strong`, severity: 'warn' })
-      else if (ratio <= 17) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — ideal strength`, severity: 'good' })
+      if (ratio < ratioMin) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — very strong`, severity: 'warn' })
+      else if (ratio <= ratioMax) brewFeedback.push({ label: `1:${ratio.toFixed(0)} — ideal strength`, severity: 'good' })
       else brewFeedback.push({ label: `1:${ratio.toFixed(0)} — weak`, severity: 'warn' })
 
       const t = params.timeSeconds
-      const [tMin, tMax] = params.method === 'v60' ? [150, 240] : [60, 120]
+      const { timeMin: tMin, timeMax: tMax } = THRESHOLDS[params.method]
       if (t < tMin) brewFeedback.push({ label: `${formatTimer(t)} — a bit fast`, severity: 'warn' })
       else if (t <= tMax) brewFeedback.push({ label: `${formatTimer(t)} — good time`, severity: 'good' })
       else brewFeedback.push({ label: `${formatTimer(t)} — a bit slow`, severity: 'warn' })
@@ -553,7 +700,9 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
 
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold text-gray-900">How was it?</h1>
+        <div className="flex items-center h-10">
+          <h1 className="text-xl font-bold text-gray-900">How was it?</h1>
+        </div>
 
         {/* Quick brew feedback */}
         <div className="flex flex-wrap gap-2">
@@ -568,7 +717,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           <div className="text-sm font-medium text-gray-700 mb-2">Rating</div>
           <div className="flex gap-2">
             {([1, 2, 3, 4, 5] as const).map(n => (
-              <button key={n} type="button" onClick={() => setRating(n)}
+              <button key={n} type="button" onClick={() => dispatch({ type: 'SET_RATING', rating: n })}
                 className={`flex-1 flex items-center justify-center h-10 rounded-xl border text-sm ${
                   rating === n ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-gray-200 text-gray-600'
                 }`}>
@@ -579,16 +728,38 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
         </Card>
 
         <Card>
-          <div className="text-sm font-medium text-gray-700 mb-2">Taste</div>
-          <div className="flex flex-wrap gap-2">
-            {TASTE_TAGS.map(({ id, label }) => (
-              <button key={id} type="button" onClick={() => toggleTag(id)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  tasteTags.includes(id) ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'
-                }`}>
-                {label}
-              </button>
-            ))}
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Taste</div>
+          <div className="space-y-2.5">
+            <div>
+              <div className="text-[10px] text-green-600 font-semibold uppercase tracking-wider mb-1.5">What's good</div>
+              <div className="flex flex-wrap gap-2">
+                {TASTE_TAGS_POSITIVE.map(({ id, label }) => (
+                  <button key={id} type="button" onClick={() => dispatch({ type: 'TOGGLE_TAG', tag: id })}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      tasteTags.includes(id)
+                        ? 'bg-green-700 border-green-700 text-white'
+                        : 'bg-white border-gray-200 text-gray-600'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-red-500 font-semibold uppercase tracking-wider mb-1.5">What's off</div>
+              <div className="flex flex-wrap gap-2">
+                {TASTE_TAGS_NEGATIVE.map(({ id, label }) => (
+                  <button key={id} type="button" onClick={() => dispatch({ type: 'TOGGLE_TAG', tag: id })}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      tasteTags.includes(id)
+                        ? 'bg-gray-900 border-gray-900 text-white'
+                        : 'bg-white border-gray-200 text-gray-600'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -598,12 +769,12 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
             <div className="mb-3">
               <div className="text-xs text-gray-500 mb-1.5">Puck state</div>
               <div className="flex gap-2 flex-wrap">
-                <button type="button" onClick={() => setPuckState(null)}
+                <button type="button" onClick={() => dispatch({ type: 'SET_PUCK_STATE', puckState: null })}
                   className={`rounded-full border px-3 py-1 text-xs font-medium ${puckState === null ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'}`}>
                   Not observed
                 </button>
                 {PUCK_STATES.map(({ id, label }) => (
-                  <button key={id} type="button" onClick={() => setPuckState(id)}
+                  <button key={id} type="button" onClick={() => dispatch({ type: 'SET_PUCK_STATE', puckState: id })}
                     className={`rounded-full border px-3 py-1 text-xs font-medium ${puckState === id ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'}`}>
                     {label}
                   </button>
@@ -613,12 +784,12 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
             <div>
               <div className="text-xs text-gray-500 mb-1.5">Flow</div>
               <div className="flex gap-2 flex-wrap">
-                <button type="button" onClick={() => setFlowState(null)}
+                <button type="button" onClick={() => dispatch({ type: 'SET_FLOW_STATE', flowState: null })}
                   className={`rounded-full border px-3 py-1 text-xs font-medium ${flowState === null ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'}`}>
                   Not observed
                 </button>
                 {FLOW_STATES.map(({ id, label }) => (
-                  <button key={id} type="button" onClick={() => setFlowState(id)}
+                  <button key={id} type="button" onClick={() => dispatch({ type: 'SET_FLOW_STATE', flowState: id })}
                     className={`rounded-full border px-3 py-1 text-xs font-medium ${flowState === id ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'}`}>
                     {label}
                   </button>
@@ -635,12 +806,12 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
             rows={3}
             placeholder="Optional notes…"
             value={notes}
-            onChange={e => setNotes(e.target.value)}
+            onChange={e => dispatch({ type: 'SET_NOTES', notes: e.target.value })}
           />
         </Card>
 
         <button type="button" onClick={handleSaveAndAnalyze}
-          disabled={!selectedBag}
+          disabled={!state.bag}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">
           Save & Analyze
         </button>
@@ -648,8 +819,10 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
     )
   }
 
-  // ─── STEP: RESULT ──────────────────────────────────────────────────────────
-  if (step === 'result' && diagnosis && savedBrew && selectedBean) {
+  // ─── STEP: RESULT ─────────────────────────────────────────────────────────────
+  if (state.step === 'result') {
+    const { bean, bag, savedBrew, diagnosis, stockPrompt } = state
+
     const scoreColor =
       diagnosis.score >= 80 ? 'text-green-600'
       : diagnosis.score >= 60 ? 'text-amber-600'
@@ -668,7 +841,9 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
 
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold text-gray-900">Analysis</h1>
+        <div className="flex items-center h-10">
+          <h1 className="text-xl font-bold text-gray-900">Analysis</h1>
+        </div>
 
         <Card className={`border ${scoreBg}`}>
           <div className={`text-4xl font-bold ${scoreColor} tabular-nums`}>
@@ -692,7 +867,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
             <Star size={16} className="fill-amber-500 text-amber-500 flex-shrink-0" />
             <span className="text-sm text-amber-800 font-medium">
-              Marked as best brew for {selectedBean.name}
+              Marked as best brew for {bean.name}
             </span>
           </div>
         )}
@@ -727,23 +902,25 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           </Card>
         )}
 
-        {stockPrompt && selectedBag && (
+        {stockPrompt && (
           <Card className="border border-stone-200 bg-stone-50">
             <div className="text-sm font-medium text-stone-800 mb-1">
-              Running low on {selectedBean.name}?
+              Running low on {bean.name}?
             </div>
             <div className="text-xs text-stone-600 mb-3">
               Based on your logged brews, this bag looks nearly empty.
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setStockPrompt(false)}
+              <button type="button"
+                onClick={() => dispatch({ type: 'SET_STOCK_PROMPT', value: false })}
                 className="flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-700">
                 Still some left
               </button>
               <button type="button"
                 onClick={async () => {
-                  await upsertBag({ ...selectedBag, depleted: true })
-                  setStockPrompt(false)
+                  const depleted = { ...bag, depleted: true }
+                  await upsertBag(depleted)
+                  dispatch({ type: 'MARK_DEPLETED', bag: depleted })
                 }}
                 className="flex-1 rounded-xl bg-stone-700 px-3 py-2 text-sm font-medium text-white">
                 Empty — move to Vault
@@ -752,7 +929,7 @@ function BrewScreen({ onNavigateToTab, onBrewStatusChange }, ref) {
           </Card>
         )}
 
-        <button type="button" onClick={resetAll}
+        <button type="button" onClick={() => dispatch({ type: 'RESET' })}
           className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white">
           Brew Again
         </button>

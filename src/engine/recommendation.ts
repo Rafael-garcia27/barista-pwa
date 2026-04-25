@@ -51,20 +51,18 @@ export function getStartingPoint(
   const methodBrews = (previousBrews ?? []).filter(b => b.params.method === method)
   const brewCountForMethod = methodBrews.length
 
-  // Candidates: rated ≥4 only. Sort: highest rating first, then most recent.
-  const candidates = methodBrews
-    .filter(b => b.rating >= 4)
-    .sort((a, b) =>
-      b.rating !== a.rating
-        ? b.rating - a.rating
-        : b.createdAt.localeCompare(a.createdAt),
-    )
-
-  const best = candidates[0]
+  // Best brew: highest rating first, then most recent. No minimum rating — if the
+  // user has logged brews but none rated ≥4, still use their best attempt as the
+  // starting point (with a softer label) rather than falling back to the generic default.
+  const best = methodBrews.sort((a, b) =>
+    b.rating !== a.rating
+      ? b.rating - a.rating
+      : b.createdAt.localeCompare(a.createdAt),
+  )[0]
 
   if (best) {
     const bp = best.params
-    const stars = '★'.repeat(best.rating)
+    const stars = '★'.repeat(best.rating) + '☆'.repeat(5 - best.rating)
     const date = brewDate(best.createdAt)
     let params: BrewParams
     let rationale: string

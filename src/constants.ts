@@ -19,12 +19,29 @@ export const PROCESSES: { id: Process; label: string }[] = [
   { id: 'honey', label: 'Honey' },
 ]
 
-export const TASTE_TAGS: { id: TasteTag; label: string }[] = [
+export const TASTE_TAGS_POSITIVE: { id: TasteTag; label: string }[] = [
+  { id: 'sweet', label: 'Sweet' },
+  { id: 'fruity', label: 'Fruity' },
+  { id: 'floral', label: 'Floral' },
+  { id: 'chocolaty', label: 'Chocolaty' },
+  { id: 'nutty', label: 'Nutty' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'bright', label: 'Bright' },
+  { id: 'syrupy', label: 'Syrupy' },
+]
+
+export const TASTE_TAGS_NEGATIVE: { id: TasteTag; label: string }[] = [
   { id: 'sour', label: 'Sour' },
   { id: 'bitter', label: 'Bitter' },
   { id: 'watery', label: 'Watery' },
   { id: 'flat', label: 'Flat' },
   { id: 'harsh', label: 'Harsh' },
+]
+
+// Combined list (positive first) for contexts that need the full set
+export const TASTE_TAGS: { id: TasteTag; label: string }[] = [
+  ...TASTE_TAGS_POSITIVE,
+  ...TASTE_TAGS_NEGATIVE,
 ]
 
 export const PUCK_STATES: { id: PuckState; label: string }[] = [

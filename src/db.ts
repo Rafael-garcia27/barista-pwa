@@ -4,7 +4,7 @@ import type { Bean, Bag, BrewLog } from './types'
 interface BaristaDB extends DBSchema {
   beans: { key: string; value: Bean; indexes: { 'by-createdAt': string } }
   bags: { key: string; value: Bag; indexes: { 'by-beanId': string; 'by-createdAt': string } }
-  brews: { key: string; value: BrewLog; indexes: { 'by-createdAt': string; 'by-bagId': string } }
+  brews: { key: string; value: BrewLog; indexes: { 'by-createdAt': string; 'by-bagId': string; 'by-beanId': string } }
 }
 
 const DB_NAME = 'barista-app'
@@ -19,18 +19,25 @@ let dbPromise: Promise<IDBPDatabase<BaristaDB>> | null = null
 
 function getDb(): Promise<IDBPDatabase<BaristaDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BaristaDB>(DB_NAME, 1, {
-      upgrade(db) {
-        const beans = db.createObjectStore('beans', { keyPath: 'id' })
-        beans.createIndex('by-createdAt', 'createdAt')
+    dbPromise = openDB<BaristaDB>(DB_NAME, 2, {
+      upgrade(db, oldVersion, _newVersion, transaction) {
+        if (oldVersion < 1) {
+          const beans = db.createObjectStore('beans', { keyPath: 'id' })
+          beans.createIndex('by-createdAt', 'createdAt')
 
-        const bags = db.createObjectStore('bags', { keyPath: 'id' })
-        bags.createIndex('by-beanId', 'beanId')
-        bags.createIndex('by-createdAt', 'createdAt')
+          const bags = db.createObjectStore('bags', { keyPath: 'id' })
+          bags.createIndex('by-beanId', 'beanId')
+          bags.createIndex('by-createdAt', 'createdAt')
 
-        const brews = db.createObjectStore('brews', { keyPath: 'id' })
-        brews.createIndex('by-createdAt', 'createdAt')
-        brews.createIndex('by-bagId', 'bagId')
+          const brews = db.createObjectStore('brews', { keyPath: 'id' })
+          brews.createIndex('by-createdAt', 'createdAt')
+          brews.createIndex('by-bagId', 'bagId')
+        }
+        if (oldVersion < 2) {
+          // Add by-beanId index on brews for direct bean→brews lookups
+          const brewStore = transaction.objectStore('brews')
+          brewStore.createIndex('by-beanId', 'beanId')
+        }
       },
       blocked() { window.location.reload() },
       blocking(_cv, _nv, event) {
@@ -100,6 +107,12 @@ export async function listBrews(): Promise<BrewLog[]> {
 export async function getBrewsByBagId(bagId: string): Promise<BrewLog[]> {
   const db = await getDb()
   const all = await db.getAllFromIndex('brews', 'by-bagId', bagId)
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export async function getBrewsByBeanId(beanId: string): Promise<BrewLog[]> {
+  const db = await getDb()
+  const all = await db.getAllFromIndex('brews', 'by-beanId', beanId)
   return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 

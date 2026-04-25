@@ -1,7 +1,11 @@
 export type BrewMethod = 'espresso' | 'v60' | 'aeropress'
 export type RoastLevel = 'light' | 'medium' | 'medium-dark' | 'dark'
 export type Process = 'washed' | 'natural' | 'honey'
-export type TasteTag = 'sour' | 'bitter' | 'watery' | 'flat' | 'harsh'
+export type TasteTag =
+  // negative
+  'sour' | 'bitter' | 'watery' | 'flat' | 'harsh' |
+  // positive
+  'sweet' | 'fruity' | 'floral' | 'chocolaty' | 'nutty' | 'balanced' | 'bright' | 'syrupy'
 export type PuckState = 'wet' | 'dry' | 'choked'
 export type FlowState = 'choked' | 'fast' | 'uneven' | 'normal'
 
@@ -60,6 +64,7 @@ export type BrewParams = EspressoParams | V60Params | AeroPressParams
 export interface BrewLog {
   id: string
   bagId: string
+  beanId?: string  // denormalized for direct lookup; optional for backwards compat with old records
   params: BrewParams
   rating: 1 | 2 | 3 | 4 | 5
   tasteTags: TasteTag[]

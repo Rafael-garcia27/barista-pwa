@@ -363,27 +363,26 @@ function BagRow({ bag, preferredMethod, roastLevel, process, onUpdated, onDelete
             </div>
           )}
 
-          {bag.purchasedGrams && remaining !== null && (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    remainingColor(remaining, bag.purchasedGrams) === 'green' ? 'bg-green-500'
-                    : remainingColor(remaining, bag.purchasedGrams) === 'amber' ? 'bg-amber-500'
-                    : 'bg-red-500'
-                  }`}
-                  style={{ width: `${Math.round((remaining / bag.purchasedGrams) * 100)}%` }}
-                />
+          {bag.purchasedGrams && remaining !== null && (() => {
+            const color = remainingColor(remaining, bag.purchasedGrams)
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      color === 'green' ? 'bg-green-500' : color === 'amber' ? 'bg-amber-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.round((remaining / bag.purchasedGrams) * 100)}%` }}
+                  />
+                </div>
+                <span className={`text-xs font-medium flex-shrink-0 ${
+                  color === 'green' ? 'text-green-700' : color === 'amber' ? 'text-amber-700' : 'text-red-600'
+                }`}>
+                  {remainingLabel(remaining)} / {bag.purchasedGrams}g
+                </span>
               </div>
-              <span className={`text-xs font-medium flex-shrink-0 ${
-                remainingColor(remaining, bag.purchasedGrams) === 'green' ? 'text-green-700'
-                : remainingColor(remaining, bag.purchasedGrams) === 'amber' ? 'text-amber-700'
-                : 'text-red-600'
-              }`}>
-                {remainingLabel(remaining)} / {bag.purchasedGrams}g
-              </span>
-            </div>
-          )}
+            )
+          })()}
 
           {brews.length > 0 && (
             <div className="text-xs text-gray-400 mt-1">{brews.length} brew{brews.length === 1 ? '' : 's'} logged</div>
@@ -484,7 +483,7 @@ function BeanCard({ bean, allBeans, onUpdated, onDeleted }: BeanCardProps) {
 
   // Summary badges: show freshness of the most recently added active bag
   const activeBags = bags.filter(b => !b.depleted)
-  const summaryBag = activeBags.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+  const summaryBag = activeBags.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
   const summaryFreshness = summaryBag?.roastDate ? getFreshness(summaryBag.roastDate, bean.preferredMethod, bean.roastLevel, bean.process) : null
 
   if (mode === 'edit') {

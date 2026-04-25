@@ -29,16 +29,21 @@ export function LogbookScreen({ isActive }: { isActive?: boolean }) {
   const [brews, setBrews] = useState<BrewLog[]>([])
   const [beanFilter, setBeanFilter] = useState<string>('')
 
-  // bagId → Bean (via bag.beanId → bean)
+  // Direct beanId lookup (new records); bagId→bean fallback for old records without beanId
+  const beanMap = useMemo(() => new Map(beans.map(b => [b.id, b])), [beans])
   const bagToBeanMap = useMemo<Map<string, Bean>>(() => {
-    const beanMap = new Map(beans.map(b => [b.id, b]))
     const result = new Map<string, Bean>()
     for (const bag of bags) {
       const bean = beanMap.get(bag.beanId)
       if (bean) result.set(bag.id, bean)
     }
     return result
-  }, [beans, bags])
+  }, [beanMap, bags])
+
+  function resolveBean(brew: BrewLog): Bean | undefined {
+    if (brew.beanId) return beanMap.get(brew.beanId)
+    return bagToBeanMap.get(brew.bagId)
+  }
 
   async function refresh() {
     const [b, bags, l] = await Promise.all([listBeans(), listBags(), listBrews()])
@@ -52,9 +57,10 @@ export function LogbookScreen({ isActive }: { isActive?: boolean }) {
 
   const filtered = useMemo(() => {
     if (!beanFilter) return brews
-    // Filter brews whose bag belongs to the selected bean
     const beanBagIds = new Set(bags.filter(b => b.beanId === beanFilter).map(b => b.id))
-    return brews.filter(b => beanBagIds.has(b.bagId))
+    return brews.filter(b =>
+      b.beanId ? b.beanId === beanFilter : beanBagIds.has(b.bagId)
+    )
   }, [brews, bags, beanFilter])
 
   async function onDelete(id: string) {
@@ -92,7 +98,7 @@ export function LogbookScreen({ isActive }: { isActive?: boolean }) {
         )}
 
         {filtered.map(brew => {
-          const bean = bagToBeanMap.get(brew.bagId)
+          const bean = resolveBean(brew)
           const beanName = bean?.name ?? 'Unknown bean'
           const methodLabel = BREW_METHODS.find(m => m.id === brew.params.method)?.label ?? brew.params.method
 
